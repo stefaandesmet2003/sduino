@@ -122,7 +122,8 @@
 
 // INTERRUPT_HANDLER_TRAP(TRAP_IRQHandler);                 /* TRAP */
 // INTERRUPT_HANDLER(TLI_IRQHandler, 0);                    /* TLI */
-// INTERRUPT_HANDLER(AWU_IRQHandler, 1);                    /* AWU */
+//sds need this for sleep (HALT)
+ INTERRUPT_HANDLER(AWU_IRQHandler, 1);                    /* AWU */
 // INTERRUPT_HANDLER(CLK_IRQHandler, 2);                    /* CLOCK */
  INTERRUPT_HANDLER(EXTI_PORTA_IRQHandler, 3);             /* EXTI PORTA */
  INTERRUPT_HANDLER(EXTI_PORTB_IRQHandler, 4);             /* EXTI PORTB */
@@ -147,7 +148,8 @@
 // INTERRUPT_HANDLER(TIM5_UPD_OVF_BRK_TRG_IRQHandler, 13);  /* TIM5 UPD/OVF/BRK/TRG */
 // INTERRUPT_HANDLER(TIM5_CAP_COM_IRQHandler, 14);          /* TIM5 CAP/COM */
 #else /* (STM8S208) || (STM8S207) || (STM8S105) || (STM8S103) || (STM8S001) || (STM8AF52Ax) || (STM8AF62Ax) || (STM8A626x) */
-// INTERRUPT_HANDLER(TIM2_UPD_OVF_BRK_IRQHandler, 13);      /* TIM2 UPD/OVF/BRK */
+//sds - need TIM2 for opentherm
+INTERRUPT_HANDLER(TIM2_UPD_OVF_BRK_IRQHandler, 13);      /* TIM2 UPD/OVF/BRK */
 // INTERRUPT_HANDLER(TIM2_CAP_COM_IRQHandler, 14);          /* TIM2 CAP/COM */
 #endif /* (STM8S903) || (STM8AF622x) */
 
@@ -167,8 +169,9 @@
 // INTERRUPT_HANDLER(UART4_TX_IRQHandler, 17);              /* UART4 TX */
 // INTERRUPT_HANDLER(UART4_RX_IRQHandler, 18);              /* UART4 RX */
 #endif /* (STM8AF622x) */
- 
-// INTERRUPT_HANDLER(I2C_IRQHandler, 19);                   /* I2C */
+
+//sds - need this for slave I2C
+INTERRUPT_HANDLER(I2C_IRQHandler, 19);                   /* I2C */
 
 #if defined(STM8S105) || defined(STM8S005) ||  defined (STM8AF626x)
  INTERRUPT_HANDLER(UART2_TX_IRQHandler, 20);              /* UART2 TX */

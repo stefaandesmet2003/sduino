@@ -11,7 +11,7 @@ void HardwareSerial_flush(void)
 #ifdef USE_SPL
   while (transmitting && ! UARTx_GetFlagStatus(UARTx_FLAG_TC));
 #else
-  while (transmitting && !(UARTx->SR & UARTx_FLAG_TC));
+  while (transmitting || !(UARTx->SR & UARTx_FLAG_TC)); //sds
 #endif
   transmitting = 0;
 }

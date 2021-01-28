@@ -17,7 +17,12 @@ void digitalWrite(uint8_t pin, uint8_t val)
 
 	out = portOutputRegister(port);
 
-	BEGIN_CRITICAL
+	//sds
+	uint8_t cc = ITC_GetSoftIntStatus();
+	if (cc == 20) // we are not called from within an ISR
+		disableInterrupts();
+
+  //BEGIN_CRITICAL
 
 	if (val == LOW) {
 		*out &= ~bit;
@@ -25,6 +30,9 @@ void digitalWrite(uint8_t pin, uint8_t val)
 		*out |= bit;
 	}
 
-	END_CRITICAL
+	//END_CRITICAL
+	//sds
+	if (cc == 20) // we are not called from within an ISR
+		enableInterrupts();
 }
 
