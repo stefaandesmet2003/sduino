@@ -1,0 +1,8 @@
+line="abc.o    dir/.oben/f2.o"
+#echo "${line//.o[      ]/_X    }"
+#echo "${line/%.o/_X}"
+line="${line//.o[      ]/_X    }"
+echo $line
+line="${line/%.o/_X}"
+echo $line
+
