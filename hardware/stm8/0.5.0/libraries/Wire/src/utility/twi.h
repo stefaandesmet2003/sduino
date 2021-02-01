@@ -51,6 +51,10 @@
   void twi_reply(uint8_t ack);
   void twi_stop(void);
   void twi_releaseBus(void);
+  //sds new in avr -> TODO : check difference with current timeout implementation in sduino
+  //void twi_setTimeoutInMicros(uint32_t, bool);
+  //void twi_handleTimeout(bool);
+  //bool twi_manageTimeoutFlag(bool);
 
 
 #endif

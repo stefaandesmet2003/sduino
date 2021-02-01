@@ -29,14 +29,6 @@
 */
 #include "Arduino.h" // for digitalWrite
 
-#ifndef cbi
-#define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
-#endif
-
-#ifndef sbi
-#define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
-#endif
-
 //#include "pins_arduino.h"
 #include "twi.h"
 
@@ -44,6 +36,16 @@ static volatile uint8_t twi_state;
 static volatile uint8_t twi_slarw;
 static volatile uint8_t twi_sendStop;			// should the transaction end with a stop
 static volatile uint8_t twi_inRepStart;			// in the middle of a repeated start
+
+// twi_timeout_us > 0 prevents the code from getting stuck in various while loops here
+// if twi_timeout_us == 0 then timeout checking is disabled (the previous Wire lib behavior)
+// at some point in the future, the default twi_timeout_us value could become 25000
+// and twi_do_reset_on_timeout could become true
+// to conform to the SMBus standard
+// http://smbus.org/specs/SMBus_3_1_20180319.pdf
+static volatile uint32_t twi_timeout_us = 0ul;
+static volatile bool twi_timed_out_flag = false;  // a timeout has been seen
+static volatile bool twi_do_reset_on_timeout = false;  // reset the TWI registers on timeout
 
 static void (*twi_onSlaveTransmit)(void);
 static void (*twi_onSlaveReceive)(uint8_t*, int);
@@ -61,6 +63,37 @@ static volatile uint8_t twi_rxBufferIndex;
 
 static volatile uint8_t twi_error;
 
+// for now - need this for easy reinit & modify frequency
+static uint8_t twi_ownAddress = 8;
+static uint32_t twi_frequency = I2C_MAX_STANDARD_FREQ;
+
+// return codes in twi_writeto 
+#define TWI_ERROR_NONE        0
+#define TWI_ERROR_ADDR_NACK   2
+#define TWI_ERROR_DATA_NACK   3
+#define TWI_ERROR_OTHER       4
+
+// TODO : cleanup this copy of ST-code for masterISR
+volatile uint8_t STATE; // curent I2C states machine state
+// Define I2C STATE MACHINE :
+
+#define INI_00 00
+
+// Write states 0x
+#define SB_01 01
+#define ADD10_02 02
+#define ADDR_03 03
+#define BTF_04 04
+
+// Read states 1x
+#define SB_11 11
+#define ADD10_12 12
+#define ADDR_13 13
+#define BTF_14 14
+#define BTF_15 15
+#define RXNE_16 16
+#define BTF_17 17
+#define RXNE_18 18
 
 /* --- SDuino additions -------------------------------------------------- */
 /* This part is common with the I2C library
@@ -72,7 +105,7 @@ static uint8_t twi_sendAddress(uint8_t, uint8_t);
 static uint8_t twi_sendByte(uint8_t);
 static uint8_t twi_receiveByte(void);
 
-static void twi_lockUp(void);
+static void twi_lockupTOREMOVE(void);
 
 static uint16_t startingTime;
 static bool timeout_expired;
@@ -94,7 +127,7 @@ static bool tout(void);
 	{ \
 		if (tout()) \
 		{ \
-			twi_lockUp(); \
+			twi_lockupTOREMOVE(); \
 			return(ERROR);/* return the appropriate error code */ \
 		} \
 	}
@@ -113,13 +146,22 @@ static bool tout(void);
  */
 void twi_init(void)
 {
+  // initialize state
+  twi_state = TWI_READY;
+  twi_sendStop = true;		// default value
+  twi_inRepStart = false;
+
 	// set I2C frequency to 100kHz and do a full init
 	twi_setFrequency(I2C_MAX_STANDARD_FREQ);
 
 	// set default timeout to 20ms
 	twi_timeOutDelay = 20;
-}
 
+  // TODO : enable I2C interrupts for master & slave
+  // for now : only SRX/STX using interrupts
+  //I2C->ITR = 0x07;
+  I2C->ITR = 0x0;
+}
 
 /*
  * Function twi_disable
@@ -129,7 +171,10 @@ void twi_init(void)
  */
 void twi_disable(void)
 {
-	I2C->CR1 = 0;
+  // disable twi module, acks, and twi interrupt
+	I2C->CR1 = 0; // this clears CR2 too, TODO : check SWRST bit!!
+  I2C->ITR = 0;
+}
 /*
   // disable twi module, acks, and twi interrupt
   TWCR &= ~(_BV(TWEN) | _BV(TWIE) | _BV(TWEA));
@@ -138,19 +183,22 @@ void twi_disable(void)
   digitalWrite(SDA, 0);
   digitalWrite(SCL, 0);
 */
-}
 
 /*
- * Function twi_slaveInit
- * Desc     sets slave address (FIXME: and enables interrupt)
+ * Function twi_setAddress
+ * Desc     sets slave address
  * Input    address to be set (gets shifted one bit left to skip the r/w bit)
  * Output   none
  */
 void twi_setAddress(uint8_t address)
 {
+  twi_ownAddress = address; // store locally because needed with twi_setFrequency
 	// set twi slave address
 	I2C->OARL = address << 1;
 	I2C->OARH = I2C_OARH_ADDCONF;
+
+  // TODO : for now only SRX/STX using TWI interrupts
+  I2C->ITR = 0x07;
 }
 
 /*
@@ -161,14 +209,15 @@ void twi_setAddress(uint8_t address)
  */
 void twi_setFrequency(uint32_t frequency)
 {
+  twi_frequency = frequency; // store for easy reinit after timeout
 	// the easiest way to change the frequency is a full re-init
 	I2C_Init(
-		frequency,		// I2C_SPEED,
-		0xA0,			// OwnAddress, doesn't matter
-		I2C_DUTYCYCLE_2,	// 0x00
-		I2C_ACK_CURR,		// 0x01
-		I2C_ADDMODE_7BIT,	// 0x00
-		F_CPU/1000000u		// InputClockFrequencyMhz
+		twi_frequency,		        // I2C_SPEED,
+		(uint16_t)twi_ownAddress << 1,  // OwnAddress
+		I2C_DUTYCYCLE_2,      // 0x00
+		I2C_ACK_CURR,         // 0x01
+		I2C_ADDMODE_7BIT,     // 0x00
+		F_CPU/1000000u        // InputClockFrequencyMhz
 	);
 }
 
@@ -253,7 +302,7 @@ uint8_t twi_readFrom(uint8_t address, uint8_t* data, uint8_t length, uint8_t sen
 	// Wait for STOP end
 	while (I2C->CR2 & I2C_CR2_STOP)
 	{
-		if (tout()) twi_lockUp();
+		if (tout()) twi_lockupTOREMOVE();
 	}
 	return (bytesAvailable);
 }
@@ -321,7 +370,7 @@ uint8_t twi_readFrom(uint8_t address, uint8_t* data, uint8_t length, uint8_t sen
 }
 */
 
-/*
+/* 
  * Function twi_writeTo
  * Desc     attempts to become twi bus master and write a
  *          series of bytes to a device on the bus
@@ -335,7 +384,99 @@ uint8_t twi_readFrom(uint8_t address, uint8_t* data, uint8_t length, uint8_t sen
  *          2 .. address send, NACK received
  *          3 .. data send, NACK received
  *          4 .. other twi error (lost bus arbitration, bus error, ..)
+ *          5 .. timeout
  */
+#if 0 // SDS_I2C
+uint8_t twi_writeTo(uint8_t address, uint8_t* data, uint8_t length, uint8_t wait, uint8_t sendStop)
+{
+  uint8_t i;
+
+  // ensure data will fit into buffer
+  if(TWI_BUFFER_LENGTH < length){
+    return 1;
+  }
+
+  // wait until twi is ready, become master transmitter
+  uint32_t startMicros = micros();
+  while(TWI_READY != twi_state){
+    if((twi_timeout_us > 0ul) && ((micros() - startMicros) > twi_timeout_us)) {
+      twi_handleTimeout(twi_do_reset_on_timeout);
+      return (5);
+    }
+  }
+  twi_state = TWI_MTX;
+  twi_sendStop = sendStop;
+  // reset error state (0x0.. no error occured)
+  twi_error = TWI_ERROR_NONE;
+
+  // initialize buffer iteration vars
+  twi_masterBufferIndex = 0;
+  twi_masterBufferLength = length;
+  
+  // copy data to twi buffer
+  for(i = 0; i < length; ++i){
+    twi_masterBuffer[i] = data[i];
+  }
+  
+  // build sla+w, slave device address + w bit
+  twi_slarw = SLA_W(address)
+
+  STATE = SB_01; // temp, for ST code
+  
+  // if we're in a repeated start, then we've already sent the START
+  // in the ISR. Don't do it again.
+  //
+  if (true == twi_inRepStart) {
+    // if we're in the repeated start state, then we've already sent the start,
+    // (@@@ we hope), and the TWI statemachine is just waiting for the address byte.
+    // We need to remove ourselves from the repeated start state before we enable interrupts,
+    // since the ISR is ASYNC, and we could get confused if we hit the ISR before cleaning
+    // up. Also, don't enable the START interrupt. There may be one pending from the 
+    // repeated start that we sent outselves, and that would really confuse things.
+    twi_inRepStart = false;			// remember, we're dealing with an ASYNC ISR
+    startMicros = micros();
+    // TODO STM8
+    /*
+    do {
+      TWDR = twi_slarw;
+      if((twi_timeout_us > 0ul) && ((micros() - startMicros) > twi_timeout_us)) {
+        twi_handleTimeout(twi_do_reset_on_timeout);
+        return (5);
+      }
+    } while(TWCR & _BV(TWWC));
+    TWCR = _BV(TWINT) | _BV(TWEA) | _BV(TWEN) | _BV(TWIE);	// enable INTs, but not START
+    */
+  } else {
+    // send start condition
+    I2C->CR2 |= I2C_CR2_ACK;	// set ACK
+    /* send start sequence */
+    I2C->CR2 |= I2C_CR2_START;	// send start sequence
+    I2C->ITR = 0x7; // enable INTs
+  }
+
+  // wait for write operation to complete
+  startMicros = micros();
+  while(wait && (TWI_MTX == twi_state)){
+    if((twi_timeout_us > 0ul) && ((micros() - startMicros) > twi_timeout_us)) {
+      twi_handleTimeout(twi_do_reset_on_timeout);
+      return (5);
+    }
+  }
+
+  return twi_error;
+  // TODO : mag weg
+  if (twi_error == 0xFF)
+    return 0;	// success
+  else if (twi_error == TW_MT_SLA_NACK)
+    return 2;	// error: address send, nack received
+  else if (twi_error == TW_MT_DATA_NACK)
+    return 3;	// error: data send, nack received
+  else
+    return 4;	// other twi error
+}
+#endif // SDS-I2C, work in progress
+
+// sduino 0.5
 uint8_t twi_writeTo(uint8_t address, uint8_t* data, uint8_t length, uint8_t wait, uint8_t sendStop)
 {
 	(void) wait;	//FIXME: no interrupt support, ignore the wait parameter for now
@@ -432,9 +573,6 @@ uint8_t twi_writeTo(uint8_t address, uint8_t* data, uint8_t length, uint8_t wait
  */
 uint8_t twi_transmit(const uint8_t* data, uint8_t length)
 {
-	(void) data;
-	(void) length;
-/*
   uint8_t i;
 
   // ensure data will fit into buffer
@@ -451,8 +589,8 @@ uint8_t twi_transmit(const uint8_t* data, uint8_t length)
   for(i = 0; i < length; ++i){
     twi_txBuffer[twi_txBufferLength+i] = data[i];
   }
+
   twi_txBufferLength += length;
-*/
 
   return 0;
 }
@@ -463,12 +601,10 @@ uint8_t twi_transmit(const uint8_t* data, uint8_t length)
  * Input    function: callback function to use
  * Output   none
  */
-/*
 void twi_attachSlaveRxEvent( void (*function)(uint8_t*, int) )
 {
   twi_onSlaveReceive = function;
 }
-*/
 
 /*
  * Function twi_attachSlaveTxEvent
@@ -476,12 +612,10 @@ void twi_attachSlaveRxEvent( void (*function)(uint8_t*, int) )
  * Input    function: callback function to use
  * Output   none
  */
-/*
 void twi_attachSlaveTxEvent( void (*function)(void) )
 {
   twi_onSlaveTransmit = function;
 }
-*/
 
 /*
  * Function twi_reply
@@ -489,8 +623,16 @@ void twi_attachSlaveTxEvent( void (*function)(void) )
  * Input    ack: byte indicating to ack or to nack
  * Output   none
  */
+void twi_reply(uint8_t ack) {
+  // transmit master read ready signal, with or without ack
+  if (ack) {
+    I2C->CR2 |= I2C_CR2_ACK;
+  } else {
+    I2C->CR2 &= ~I2C_CR2_ACK;
+  }
+}
 /*
-void twi_reply(uint8_t ack)
+  // original Arduino code (for reference):
 {
   // transmit master read ready signal, with or without ack
   if(ack){
@@ -501,6 +643,7 @@ void twi_reply(uint8_t ack)
 }
 */
 
+// TODO: twi_stop can't be used in SRX/STX, because of the first while clause
 /*
  * Function twi_stop
  * Desc     relinquishes bus master status
@@ -517,9 +660,9 @@ void twi_stop(void)
 	while ((I2C->SR1 & (I2C_SR1_TXE | I2C_SR1_BTF)) != (I2C_SR1_TXE | I2C_SR1_BTF))
 	{
 		if (tout())
-        	{
-	        	twi_lockUp();
-	        	return; 	// don't update twi_state
+    {
+      twi_lockupTOREMOVE();
+      return; 	// don't update twi_state
 		}
 	}
 
@@ -541,7 +684,7 @@ void twi_stop(void)
 	{
 		if (tout())
         	{
-	        	twi_lockUp();
+	        	twi_lockupTOREMOVE();
 	        	return; 	// don't update twi_state
 		}
 	}
@@ -561,6 +704,7 @@ void twi_stop(void)
   twi_state = TWI_READY;
 }
 
+// not needed for STM8
 /*
  * Function twi_releaseBus
  * Desc     releases bus control
@@ -568,7 +712,7 @@ void twi_stop(void)
  * Output   none
  */
 /*
-void twi_releaseBus(void)
+void twi_releaseBus(void) {
 {
   // release bus
   TWCR = _BV(TWEN) | _BV(TWIE) | _BV(TWEA) | _BV(TWINT);
@@ -577,6 +721,401 @@ void twi_releaseBus(void)
   twi_state = TWI_READY;
 }
 */
+
+// TODO : copied from recent arduino Wire library -> integrate here
+/* 
+ * Function twi_setTimeoutInMicros
+ * Desc     set a timeout for while loops that twi might get stuck in
+ * Input    timeout value in microseconds (0 means never time out)
+ * Input    reset_with_timeout: true causes timeout events to reset twi
+ * Output   none
+ */
+void twi_setTimeoutInMicros(uint32_t timeout, bool reset_with_timeout){
+  twi_timed_out_flag = false;
+  twi_timeout_us = timeout;
+  twi_do_reset_on_timeout = reset_with_timeout;
+}
+
+/* 
+ * Function twi_handleTimeout
+ * Desc     this gets called whenever a while loop here has lasted longer than
+ *          twi_timeout_us microseconds. always sets twi_timed_out_flag
+ * Input    reset: true causes this function to reset the twi hardware interface
+ * Output   none
+ */
+// TODO : check if this is correct for STM8
+void twi_handleTimeout(bool reset){
+  twi_timed_out_flag = true;
+
+  if (reset) {
+    // reset the interface
+    // TODO! need a SWRST on the TWI here, disable doesn't do SWRST!
+    I2C->CR2 = I2C_CR2_SWRST;
+    twi_disable();
+    twi_init();
+    I2C->CR2 = 0; // TODO : check o-if SWRST bit auto-resets after disable/enable!
+
+    // reapply the previous register values
+    twi_setFrequency(twi_frequency);
+  }
+}
+
+/*
+ * Function twi_manageTimeoutFlag
+ * Desc     returns true if twi has seen a timeout
+ *          optionally clears the timeout flag
+ * Input    clear_flag: true if we should reset the hardware
+ * Output   none
+ */
+bool twi_manageTimeoutFlag(bool clear_flag){
+  bool flag = twi_timed_out_flag;
+  if (clear_flag){
+    twi_timed_out_flag = false;
+  }
+  return(flag);
+}
+
+#if 0 // work in progress
+// code copied from ST
+void twiMasterISR () {
+  uint8_t sr1, sr2, cr2;
+
+  /* Get Value of Status registers and Control register 2 */
+	sr1 = I2C->SR1;
+	sr2 = I2C->SR2;
+	cr2 = I2C->CR2;
+
+  /* Communication error? */
+  if (sr2 & (I2C_SR2_WUFH | I2C_SR2_OVR |I2C_SR2_ARLO |I2C_SR2_BERR))
+  {
+    I2C->SR2= 0; // clear all error flags
+
+    // TODO : AVR does releaseBus() here, but that doesn't mean anything for STM8
+    // update twi state
+    twi_error = TWI_ERROR_OTHER;
+    twi_state = TWI_READY; 	
+	  STATE = INI_00;  
+    return;
+  }
+
+  // not foreseen in ST code : NACK on addr/data
+  // TODO: complete for TWI_ERROR_DATA_NACK
+  if (sr2 & I2C_SR2_AF) {
+      twi_error = TWI_ERROR_ADDR_NACK;
+      //twi_stop(); // dit werkt hier niet geen TXE=1=BTF,
+      //we willen hier een STOP sturen (zoals AVR), maar zonder eerst TXE=1=BTF te checken
+      // en wachten tot ze op de bus staat
+      twi_state = TWI_READY; 	
+      return;
+  }
+	
+  /* Start bit detected */
+  if ((sr1 & I2C_SR1_SB) == 1)
+  {
+    switch(STATE) 
+    {
+      case SB_01: //write
+        I2C->DR = twi_slarw; // only support 7-bit addresses
+        STATE = ADDR_03; 
+        break;
+                
+      case SB_11: //read
+        I2C->DR = twi_slarw; // only support 7-bit addresses
+        STATE = ADDR_13; 
+        break;
+      /*
+      default : ErrProc();
+        break;
+      */
+    }
+  }
+	
+	/* ADDR*/
+  if ((sr1 & I2C_SR1_ADDR) == I2C_SR1_ADDR) 
+  {
+    I2C->SR3; /* Clear Add Ack Flag */
+		switch (STATE)
+		{					
+			case ADDR_13 : // read
+        if (twi_masterBufferLength == 3)
+        {
+          STATE = BTF_15;
+          break;
+        }
+        if (twi_masterBufferLength == 2)
+        {
+          // set POS bit
+          I2C->CR2 |= I2C_CR2_POS;
+          // set No ACK
+          I2C->CR2 &= ~I2C_CR2_ACK;
+          STATE = BTF_17;
+          break;
+        }
+        if (twi_masterBufferLength == 1)
+        {
+          I2C->CR2 &= ~I2C_CR2_ACK;
+          I2C->CR2 |= I2C_CR2_STOP;
+          I2C->ITR |= I2C_ITR_ITBUFEN;
+          STATE = RXNE_18;
+          break;
+        }
+        if (twi_masterBufferLength >3)
+        {
+          STATE = BTF_14;
+          break;
+        }
+        break;
+									
+			case ADDR_03 : // write
+        // copy data to output register
+        I2C->DR = twi_masterBuffer[twi_masterBufferIndex++];
+        STATE = BTF_04;
+        break;
+			/*			
+			default : ErrProc();
+        break;
+      */
+		}
+	}
+
+  if ((sr1 & I2C_SR1_RXNE)==I2C_SR1_RXNE)
+  {
+    switch (STATE)
+    {
+      case RXNE_18 :
+        // put byte into buffer
+        twi_masterBuffer[twi_masterBufferIndex++] = I2C->DR;
+        STATE = INI_00;
+        //set_tout_ms(0); // TODO : disable timeout
+        break;
+      case RXNE_16 :
+        // put byte into buffer
+        twi_masterBuffer[twi_masterBufferIndex++] = I2C->DR;
+        STATE = INI_00;
+        // set_tout_ms(0); // TODO : disable timeout
+        break;
+    }
+    I2C->ITR &= ~I2C_ITR_ITBUFEN;  // Disable Buffer interrupts (errata)
+  }
+
+	/* BTF */
+	if ((sr1 & I2C_SR1_BTF) == I2C_SR1_BTF)
+	{
+		switch (STATE)
+		{
+			case BTF_17 :
+        I2C->CR2 |= I2C_CR2_STOP;                   				// generate stop request here (STOP=1)
+        twi_masterBuffer[twi_masterBufferIndex++]= I2C->DR; // Read next data byte
+        twi_masterBuffer[twi_masterBufferIndex++]= I2C->DR;	// Read next data byte
+        STATE = INI_00;
+        // set_tout_ms(0); // TODO : disable timeout
+        break;
+								
+			case BTF_14 :	
+        twi_masterBuffer[twi_masterBufferIndex++] = I2C->DR;
+        if (twi_masterBufferLength - twi_masterBufferIndex <= 3)
+          STATE = BTF_15;
+        break;
+			
+			case BTF_15 : 	
+        I2C->CR2 &= ~I2C_CR2_ACK;                             // Set NACK (ACK=0)
+        twi_masterBuffer[twi_masterBufferIndex++] = I2C->DR;  // Read next data byte
+        I2C->CR2 |= I2C_CR2_STOP;                             // Generate stop here (STOP=1)
+        twi_masterBuffer[twi_masterBufferIndex++] = I2C->DR;  // Read next data byte
+        I2C->ITR |= I2C_ITR_ITBUFEN; 										      // Enable Buffer interrupts (errata)
+        STATE = RXNE_16;
+        break;
+												
+			case BTF_04 : 
+        if ((twi_masterBufferIndex!=twi_masterBufferLength) && ((I2C->SR1 & I2C_SR1_TXE) == I2C_SR1_TXE))
+        {
+          I2C->DR = twi_masterBuffer[twi_masterBufferIndex++]; // Write next data byte
+          break;
+        } 
+        else 
+        {
+          if (twi_sendStop)
+          {										
+            twi_stop(); // Generate stop here (STOP=1)
+          }
+          else
+          {
+            twi_inRepStart = true;	// we're gonna send the START
+            // don't enable the interrupt. We'll generate the start, but we
+            // avoid handling the interrupt until we're in the next transaction,
+            // at the point where we would normally issue the start.
+            I2C->ITR = 0;               // disable interrupt
+            twi_state = TWI_READY;
+          }
+          STATE = INI_00;
+          // set_tout_ms(0); // TODO : disable timeout
+          break;
+        }
+		}
+	}
+} // twiMasterISR
+
+#endif // work in progress
+
+// for now only SRX & STX handled in ISR, master mode uses original non-interrupt sduino code
+INTERRUPT_HANDLER(I2C_IRQHandler, ITC_IRQ_I2C) // 19
+{
+  // TODO : why are these static in the ST-code (AN3281)?
+  uint8_t SR1;
+  uint8_t SR2;
+  uint8_t SR3;
+
+  if (twi_state == TWI_MTX || twi_state == TWI_MRX) {
+    // master handled by ST code
+    //twiMasterISR();
+    return;
+  }
+
+  // save the I2C registers configuration
+  SR1 = I2C->SR1;
+  SR2 = I2C->SR2;
+  SR3 = I2C->SR3;
+
+  /* Communication error? */
+  if (SR2 & (I2C_SR2_WUFH | I2C_SR2_OVR |I2C_SR2_ARLO |I2C_SR2_BERR))
+  {
+    I2C->CR2|= I2C_CR2_STOP;        // stop communication - release the lines
+    I2C->SR2= 0;                    // clear all error flags
+
+    // update twi state
+    twi_error = TWI_ERROR_OTHER;
+    twi_state = TWI_READY;    
+    return;
+  }
+
+  // this case is RXNE=1 ánd BTF=1 -> we are 2 bytes behind
+  /* More bytes received ? */
+  if ((SR1 & (I2C_SR1_RXNE | I2C_SR1_BTF)) == (I2C_SR1_RXNE | I2C_SR1_BTF))
+  {
+    uint8_t aByte = I2C->DR;
+    // if there is still room in the rx buffer
+    if (twi_rxBufferIndex < TWI_BUFFER_LENGTH){
+      twi_rxBuffer[twi_rxBufferIndex++] = aByte;
+    }
+    // no return here, we have another byte to handle
+  }
+  /* Note:  there seems to be a bug in AVR implementation:
+   * when twi_rxBufferIndex==TWI_BUFFER_LENGTH-1, ack=1 (twi_reply(1))
+   * but then, the next byte (byte 33) will be acked by TWI, but can't be stored in rx buffer
+  */
+  /* Byte received ? */
+  if (SR1 & I2C_SR1_RXNE)
+  {
+    uint8_t aByte = I2C->DR;
+    // if there is still room in the rx buffer
+    if (twi_rxBufferIndex < TWI_BUFFER_LENGTH){
+      twi_rxBuffer[twi_rxBufferIndex++] = aByte;
+    }
+    // decide ACK/NACK based on the new buffer index
+    if (twi_rxBufferIndex < TWI_BUFFER_LENGTH){
+      twi_reply(1); // still room to receive the next byte
+    } else {
+      // otherwise nack
+      twi_reply(0);
+    }
+    // no return here, we might have a STOPF to handle in the same ISR run
+  }
+  /* NAK? (=end of slave transmit comm) */
+  if (SR2 & I2C_SR2_AF)
+  {
+    I2C->SR2 &= ~I2C_SR2_AF;    // clear AF
+    // different than AVR, nothing more to do here for STM8
+    // leave slave transmitter state
+    twi_state = TWI_READY;
+    return;
+  }
+  /* Stop bit from Master  (= end of slave receive comm) */
+  if (SR1 & I2C_SR1_STOPF) 
+  {
+    I2C->CR2 |= I2C_CR2_ACK;    // CR2 write to clear STOPF
+    twi_state = TWI_READY;
+    // put a null char after data if there's room
+    if(twi_rxBufferIndex < TWI_BUFFER_LENGTH){
+      twi_rxBuffer[twi_rxBufferIndex] = '\0';
+    }
+    // callback to user defined callback
+    twi_onSlaveReceive(twi_rxBuffer, twi_rxBufferIndex);
+    // since we submit rx buffer to "wire" library, we can reset it
+    twi_rxBufferIndex = 0;
+    return;
+  }
+  /* Slave address matched (= Start Comm) */
+  if (SR1 & I2C_SR1_ADDR)
+  {
+    // this is particular to STM8 : 
+    // if we had a repeated start after SRX, we will only know after being addressed again (unlike AVR)
+    // if MTX doesn't address us after a repeated start, it will take until we see a STOP on the bus before twi_onSlaveReceive
+    if (twi_state == TWI_SRX) { // haven't seen a STOPF, and addressed again -> repeated start, do the same as for STOPF
+      twi_state = TWI_READY;
+      // put a null char after data if there's room
+      if(twi_rxBufferIndex < TWI_BUFFER_LENGTH){
+        twi_rxBuffer[twi_rxBufferIndex] = '\0';
+      }
+      // callback to user defined callback
+      twi_onSlaveReceive(twi_rxBuffer, twi_rxBufferIndex);
+      // since we submit rx buffer to "wire" library, we can reset it
+      twi_rxBufferIndex = 0;
+    }
+    if (SR3 & I2C_SR3_TRA) {
+      // enter slave transmitter mode
+      twi_state = TWI_STX;
+      // ready the tx buffer index for iteration
+      twi_txBufferIndex = 0;
+      // set tx buffer length to be zero, to verify if user changes it
+      twi_txBufferLength = 0;
+      // request for txBuffer to be filled and length to be set
+      // note: user must call twi_transmit(bytes, length) to do this
+      twi_onSlaveTransmit();
+      // if they didn't change buffer & length, initialize it
+      if(0 == twi_txBufferLength){
+        twi_txBufferLength = 1;
+        twi_txBuffer[0] = 0x00;
+      }
+      // transmit first byte from buffer, fall
+    } else {
+      // enter slave receiver mode
+      twi_state = TWI_SRX;
+      // indicate that rx buffer can be overwritten and ack
+      twi_rxBufferIndex = 0;
+      twi_reply(1);
+      return;
+    }
+  }
+  // sds: kunnen de volgende 2 if's niet samen???
+  /* More bytes to transmit ? */
+  if ((SR1 & (I2C_SR1_TXE | I2C_SR1_BTF)) == (I2C_SR1_TXE | I2C_SR1_BTF))
+  {
+    I2C->DR = twi_txBuffer[twi_txBufferIndex++];
+    // implementation is different than AVR :
+    // if there is no more to send, CR2.STOP=1 will release the lines, 
+    // and slave goes to non-addressed state
+    if(twi_txBufferIndex >= twi_txBufferLength){
+      I2C->CR2 |= I2C_CR2_STOP;	// stop communication - release the lines
+      // leave slave transmitter state
+      twi_state = TWI_READY;
+    }
+    return;
+  }
+  /* Byte to transmit ? */
+  if (SR1 & I2C_SR1_TXE)
+  {
+    I2C->DR = twi_txBuffer[twi_txBufferIndex++];
+    // implementation is different than AVR :
+    // if there is no more to send, CR2.STOP=1 will release the lines, 
+    // and slave goes to non-addressed state
+    if(twi_txBufferIndex >= twi_txBufferLength){
+      I2C->CR2 |= I2C_CR2_STOP;	// stop communication - release the lines
+      // leave slave transmitter state
+      twi_state = TWI_READY;
+    }
+    return;
+  } 
+} // I2C_IRQHandler
 
 /*
 ISR(TWI_vect)
@@ -749,7 +1288,7 @@ ISR(TWI_vect)
  * send start condition and the target address and wait for the ADDR event
  *
  * The flag handling for POS and ACK is determined by the mode byte.
- * At the end, ADDR is cleared by reading CR3.
+ * At the end, ADDR is cleared by reading SR3.
  *
  * @parms mode: set the flag handling for POS and ACK
  *		1: clear ACK in ADDR event, before clearing ADDR (receive 1)
@@ -833,14 +1372,14 @@ static uint8_t twi_receiveByte(void)
 	TIMEOUT_WAIT_FOR_ONE(I2C_CheckEvent(I2C_EVENT_MASTER_BYTE_RECEIVED), 1)
 	    if (I2C->SR2 & I2C_SR2_ARLO)	// arbitration lost
 	{
-		twi_lockUp();
+		twi_lockupTOREMOVE();
 		return (2);//FIXME: should be LOST_ARBTRTN);
 	}
 	return (0);
 }
 
 
-static void twi_lockUp(void)
+static void twi_lockupTOREMOVE(void)
 {
 #if 0
 	TWCR = 0;		//releases SDA and SCL lines to high impedance
@@ -850,6 +1389,11 @@ static void twi_lockUp(void)
 	// don't do a full software reset here. That would require a full
 	// re-initialization before the next transfer could happen.
 	I2C->CR2 = 0;
+
+  // TODO : in current sduino code, we come here after e.g. ADDR NACK 
+  // that's not a lockup
+  // wat is full software reset? STM8 reset? en waarom geen SWRST van TWI?
+  // we zouden hier om te beginnen een while(1) kunnen zetten met een blinkie
 }
 
 /**

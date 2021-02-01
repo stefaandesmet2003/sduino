@@ -32,12 +32,11 @@
 
 #include <Wire.h>
 
-
 void setup()
 {
   Wire_begin();
 
-  Serial_begin(9600);
+  Serial_begin(115200);
   while (!Serial);             // Leonardo: wait for serial monitor
   Serial_println_s("\nI2C Scanner");
 }
