@@ -38,6 +38,10 @@
 #define PROGMEM
 void yield(void);
 
+//SDS (voor MySensors)
+#define __attribute__(X)
+#define __FlashStringHelper char
+
 // we use pre-defined IRQ function the way wiring does
 #define WIRING
 
