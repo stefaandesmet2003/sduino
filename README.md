@@ -14,5 +14,21 @@ slave_receiver and slave_sender examples have been updated with the sduino C-sty
 
 added an example, showing STM8 as a I2C serial eeprom. The example demonstrates the use of both onReceive() and onRequest() callbacks
 
+## MySensors Light - work in progress
+A lightweight version of the popular MySensors library ported to STM8.
+
+Library is using the RF24 code integrated with MySensors; other transports are not included (yet)
+
+Some functionality of MySensors has been dropped, in order to fit in 8kB flash:
+- no gateway functionality (makes no sense on STM8)
+- no dynamic routing: a fixed parentID can to be assigned (default=GATEWAY)
+- not all types are ported, in particular string buffer, to avoid expensive stdlib functions.
+
+STM8Node shows a working example.
+
+Todo : 
+- code size optimization. For the moment the working example takes 94% of 8kB flash. Probably need to drop some more MySensors functionality
+- integrate smart sleep code for low power nodes
+
 
 
