@@ -41,6 +41,11 @@ void yield(void);
 //SDS (voor MySensors)
 #define __attribute__(X)
 #define __FlashStringHelper char
+#define itoa _itoa
+#define utoa _uitoa
+#define ltoa _ltoa
+#define ultoa _ultoa
+
 
 // we use pre-defined IRQ function the way wiring does
 #define WIRING

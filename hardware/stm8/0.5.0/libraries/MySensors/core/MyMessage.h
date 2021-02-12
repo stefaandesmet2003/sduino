@@ -665,7 +665,65 @@ typedef union {
 };
 uint8_t array[HEADER_SIZE + MAX_PAYLOAD_SIZE + 1]; //!< buffer for entire message
 } __attribute__((packed)) MyMessage;
-#endif
+
+// SDS - prototypes
+void MyMessage_init(MyMessage *msg);
+void MyMessage_init2(MyMessage *msg, const uint8_t _sensorId, const mysensors_data_t _dataType);
+void MyMessage_clear(MyMessage *msg);
+uint8_t MyMessage_getHeaderSize(MyMessage *msg);
+uint8_t MyMessage_getMaxPayloadSize(MyMessage *msg);
+uint8_t MyMessage_getExpectedMessageSize(MyMessage *msg);
+bool MyMessage_isProtocolVersionValid(MyMessage *msg);
+uint8_t MyMessage_getType(MyMessage *msg);
+MyMessage* MyMessage_setType(MyMessage *msg, const uint8_t messageType);
+uint8_t MyMessage_getLast(MyMessage *msg);
+MyMessage* MyMessage_setLast(MyMessage *msg, const uint8_t lastId);
+uint8_t MyMessage_getSender(MyMessage *msg);
+MyMessage* MyMessage_setSender(MyMessage *msg, const uint8_t senderId);
+uint8_t MyMessage_getSensor(MyMessage *msg);
+MyMessage* MyMessage_setSensor(MyMessage *msg, const uint8_t sensorId);
+uint8_t MyMessage_getDestination(MyMessage *msg);
+MyMessage* MyMessage_setDestination(MyMessage *msg, const uint8_t destinationId);
+// TODO: Remove before v3 is released, use isEcho instead
+bool MyMessage_isAck(MyMessage *msg);
+bool MyMessage_isEcho(MyMessage *msg);
+MyMessage* MyMessage_setEcho(MyMessage *msg, const bool echo);
+bool MyMessage_getRequestEcho(MyMessage *msg);
+MyMessage* MyMessage_setRequestEcho(MyMessage *msg,const bool requestEcho);
+uint8_t MyMessage_getVersion(MyMessage *msg);
+MyMessage* MyMessage_setVersion(MyMessage *msg);
+mysensors_command_t MyMessage_getCommand(MyMessage *msg);
+MyMessage* MyMessage_setCommand(MyMessage *msg, const mysensors_command_t command);
+mysensors_payload_t MyMessage_getPayloadType(MyMessage *msg);
+MyMessage* MyMessage_setPayloadType(MyMessage *msg, const mysensors_payload_t payloadType);
+bool MyMessage_getSigned(MyMessage *msg);
+MyMessage* MyMessage_setSigned(MyMessage *msg, const bool signedFlag);
+uint8_t MyMessage_getLength(MyMessage *msg);
+MyMessage* MyMessage_setLength(MyMessage *msg, const uint8_t length);
+/* Getters for payload converted to desired form */
+void* MyMessage_getCustom(MyMessage *msg);
+const char* MyMessage_getString(MyMessage *msg);
+char* MyMessage_getCustomString(MyMessage *msg, char *buffer);
+char* MyMessage_getStream(MyMessage *msg, char *buffer);
+char* MyMessage_getStringBuffer(MyMessage *msg, char *buffer);
+bool MyMessage_getBool(MyMessage *msg);
+uint8_t MyMessage_getByte(MyMessage *msg);
+float MyMessage_getFloat(MyMessage *msg);
+int32_t MyMessage_getLong(MyMessage *msg);
+uint32_t MyMessage_getULong(MyMessage *msg);
+int16_t MyMessage_getInt(MyMessage *msg);
+uint16_t MyMessage_getUInt(MyMessage *msg);
+MyMessage* MyMessage_setCustom(MyMessage *msg, const void* value, const size_t _length);
+MyMessage* MyMessage_setString(MyMessage *msg, const char* value);
+MyMessage* MyMessage_setBool(MyMessage *msg, const bool value);
+MyMessage* MyMessage_setByte(MyMessage *msg, const uint8_t value);
+MyMessage* MyMessage_setFloat(MyMessage *msg, const float value, const uint8_t decimals);
+MyMessage* MyMessage_setULong(MyMessage *msg, const uint32_t value);
+MyMessage* MyMessage_setLong(MyMessage *msg, const int32_t value);
+MyMessage* MyMessage_setUInt(MyMessage *msg, const uint16_t value);
+MyMessage* MyMessage_setInt(MyMessage *msg, const int16_t value);
+
+#endif // cplusplus
 
 #endif
 /** @}*/

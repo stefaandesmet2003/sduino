@@ -90,7 +90,7 @@ int8_t hwSleep(uint32_t ms);
  * @param ms         Time to sleep, in [ms].
  * @return MY_WAKE_UP_BY_TIMER when woken by timer, or interrupt number when woken by interrupt.
  */
-int8_t hwSleep(const uint8_t interrupt, const uint8_t mode, uint32_t ms);
+int8_t hwSleep3(const uint8_t interrupt, const uint8_t mode, uint32_t ms);
 
 /**
  * Sleep for a defined time, using minimum power, or until woken by one of the interrupts.
@@ -101,7 +101,7 @@ int8_t hwSleep(const uint8_t interrupt, const uint8_t mode, uint32_t ms);
  * @param ms          Time to sleep, in [ms].
  * @return MY_WAKE_UP_BY_TIMER when woken by timer, or interrupt number when woken by interrupt.
  */
-int8_t hwSleep(const uint8_t interrupt1, const uint8_t mode1, const uint8_t interrupt2,
+int8_t hwSleep5(const uint8_t interrupt1, const uint8_t mode1, const uint8_t interrupt2,
                const  uint8_t mode2,
                uint32_t ms);
 

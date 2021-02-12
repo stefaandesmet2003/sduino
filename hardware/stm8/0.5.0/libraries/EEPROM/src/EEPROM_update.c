@@ -29,7 +29,7 @@
 
 /* --- Arduino-like interface -------------------------------------------- */
 
-void EEPROM_update( int idx, uint8_t val )
+void EEPROM_update( uint16_t idx, uint8_t val )
 {
 	// make sure not to write data beyond the end of the EEPROM area
 	// (this could accidentally hit the option byte area)

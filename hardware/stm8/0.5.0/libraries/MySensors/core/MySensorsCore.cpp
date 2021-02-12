@@ -214,9 +214,9 @@ void _registerNode(void)
 	uint8_t counter = MY_REGISTRATION_RETRIES;
 	// only proceed if register response received or retries exceeded
 	do {
-		(void)_sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
-		                       I_REGISTRATION_REQUEST).set(MY_CORE_VERSION));
-	} while (!wait(2000, C_INTERNAL, I_REGISTRATION_RESPONSE) && counter--);
+		(void)_sendRoute(MyMessage_setByte(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
+		                       I_REGISTRATION_REQUEST,false),MY_CORE_VERSION));
+	} while (!wait3(2000, C_INTERNAL, I_REGISTRATION_RESPONSE) && counter--);
 #else
 	_coreConfig.nodeRegistered = true;
 	CORE_DEBUG(PSTR("MCO:REG:NOT NEEDED\n"));
@@ -230,9 +230,9 @@ void presentNode(void)
 #if defined(MY_GATEWAY_FEATURE)
 	// Send presentation for this gateway device
 #if defined(MY_REPEATER_FEATURE)
-	(void)present(NODE_SENSOR_ID, S_ARDUINO_REPEATER_NODE);
+	(void)present(NODE_SENSOR_ID, S_ARDUINO_REPEATER_NODE,"",false);
 #else
-	(void)present(NODE_SENSOR_ID, S_ARDUINO_NODE);
+	(void)present(NODE_SENSOR_ID, S_ARDUINO_NODE,"",false);
 #endif
 #else
 
@@ -241,22 +241,22 @@ void presentNode(void)
 #endif
 
 	// Send signing preferences for this node to the GW
-	signerPresentation(_msgTmp, GATEWAY_ADDRESS);
+	signerPresentation(&_msgTmp, GATEWAY_ADDRESS);
 
 	// Send presentation for this radio node
 #if defined(MY_REPEATER_FEATURE)
-	(void)present(NODE_SENSOR_ID, S_ARDUINO_REPEATER_NODE);
+	(void)present(NODE_SENSOR_ID, S_ARDUINO_REPEATER_NODE,"",false);
 #else
-	(void)present(NODE_SENSOR_ID, S_ARDUINO_NODE);
+	(void)present(NODE_SENSOR_ID, S_ARDUINO_NODE,"",false);
 #endif
 
 	// Send a configuration exchange request to controller
 	// Node sends parent node. Controller answers with latest node configuration
-	(void)_sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
-	                       I_CONFIG).set(getParentNodeId()));
+	(void)_sendRoute(MyMessage_setByte(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
+	                       I_CONFIG,false),getParentNodeId()));
 
 	// Wait configuration reply.
-	(void)wait(2000, C_INTERNAL, I_CONFIG);
+	(void)wait3(2000, C_INTERNAL, I_CONFIG);
 
 #endif
 
@@ -305,13 +305,13 @@ uint8_t getDistanceGW(void)
 	return result;
 }
 
-controllerConfig_t getControllerConfig(void)
+controllerConfig_t *getControllerConfig(void)
 {
-	return _coreConfig.controllerConfig;
+	return &_coreConfig.controllerConfig;
 }
 
 
-bool _sendRoute(MyMessage &message)
+bool _sendRoute(MyMessage *message)
 {
 #if defined(MY_CORE_ONLY)
 	(void)message;
@@ -330,11 +330,11 @@ bool _sendRoute(MyMessage &message)
 #endif
 }
 
-bool send(MyMessage &message, const bool requestEcho)
+bool send(MyMessage *message, const bool requestEcho)
 {
-	message.setSender(getNodeId());
-	message.setCommand(C_SET);
-	message.setRequestEcho(requestEcho);
+	MyMessage_setSender(message, getNodeId());
+	MyMessage_setCommand(message,C_SET);
+	MyMessage_setRequestEcho(message,requestEcho);
 
 #if defined(MY_REGISTRATION_FEATURE) && !defined(MY_GATEWAY_FEATURE)
 	if (_coreConfig.nodeRegistered) {
@@ -350,20 +350,20 @@ bool send(MyMessage &message, const bool requestEcho)
 
 bool sendBatteryLevel(const uint8_t value, const bool requestEcho)
 {
-	return _sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_BATTERY_LEVEL,
-	                        requestEcho).set(value));
+	return _sendRoute(MyMessage_setByte(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_BATTERY_LEVEL,
+	                        requestEcho),value));
 }
 
 bool sendHeartbeat(const bool requestEcho)
 {
 #if defined(MY_SENSOR_NETWORK)
 	const uint32_t heartbeat = transportGetHeartbeat();
-	return _sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_HEARTBEAT_RESPONSE,
-	                        requestEcho).set(heartbeat));
+	return _sendRoute(MyMessage_setULong(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_HEARTBEAT_RESPONSE,
+	                        requestEcho),heartbeat));
 #elif defined(MY_GATEWAY_FEATURE)
 	const uint32_t heartbeat = hwMillis();
-	return _sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_HEARTBEAT_RESPONSE,
-	                        requestEcho).set(heartbeat));
+	return _sendRoute(MyMessage_setULong(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_HEARTBEAT_RESPONSE,
+	                        requestEcho),heartbeat));
 #else
 	(void)requestEcho;
 	return false;
@@ -376,70 +376,41 @@ bool present(const uint8_t childSensorId, const mysensors_sensor_t sensorType,
              const char *description,
              const bool requestEcho)
 {
-	return _sendRoute(build(_msgTmp, GATEWAY_ADDRESS, childSensorId, C_PRESENTATION,
-	                        static_cast<uint8_t>(sensorType),
-	                        requestEcho).set(childSensorId == NODE_SENSOR_ID ? MYSENSORS_LIBRARY_VERSION : description));
+	return _sendRoute(MyMessage_setString(build(&_msgTmp, GATEWAY_ADDRESS, childSensorId, C_PRESENTATION,
+	                        (uint8_t)(sensorType),
+	                        requestEcho),childSensorId == NODE_SENSOR_ID ? MYSENSORS_LIBRARY_VERSION : description));
 }
-
-#if !defined(__linux__)
-bool present(const uint8_t childSensorId, const mysensors_sensor_t sensorType,
-             const __FlashStringHelper *description,
-             const bool requestEcho)
-{
-	return _sendRoute(build(_msgTmp, GATEWAY_ADDRESS, childSensorId, C_PRESENTATION,
-	                        static_cast<uint8_t>(sensorType),
-	                        requestEcho).set(childSensorId == NODE_SENSOR_ID ? F(" MYSENSORS_LIBRARY_VERSION "): description));
-}
-#endif
-
 
 bool sendSketchInfo(const char *name, const char *version, const bool requestEcho)
 {
 	bool result = true;
 	if (name) {
-		result &= _sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_SKETCH_NAME,
-		                           requestEcho).set(name));
+		result &= _sendRoute(MyMessage_setString(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_SKETCH_NAME,
+		                           requestEcho),name));
 	}
 	if (version) {
-		result &= _sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_SKETCH_VERSION,
-		                           requestEcho).set(version));
+		result &= _sendRoute(MyMessage_setString(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_SKETCH_VERSION,
+		                           requestEcho),version));
 	}
 	return result;
 }
-
-#if !defined(__linux__)
-bool sendSketchInfo(const __FlashStringHelper *name, const __FlashStringHelper *version,
-                    const bool requestEcho)
-{
-	bool result = true;
-	if (name) {
-		result &= _sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_SKETCH_NAME,
-		                           requestEcho).set(name));
-	}
-	if (version) {
-		result &= _sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_SKETCH_VERSION,
-		                           requestEcho).set(version));
-	}
-	return result;
-}
-#endif
 
 bool request(const uint8_t childSensorId, const uint8_t variableType, const uint8_t destination)
 {
-	return _sendRoute(build(_msgTmp, destination, childSensorId, C_REQ, variableType).set(""));
+	return _sendRoute(MyMessage_setString(build(&_msgTmp, destination, childSensorId, C_REQ, variableType,false),""));
 }
 
 bool requestTime(const bool requestEcho)
 {
-	return _sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_TIME,
-	                        requestEcho).set(""));
+	return _sendRoute(MyMessage_setString(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_TIME,
+	                        requestEcho),""));
 }
 
 // Message delivered through _msg
 bool _processInternalCoreMessage(void)
 {
-	const uint8_t type = _msg.getType();
-	if (_msg.getSender() == GATEWAY_ADDRESS) {
+	const uint8_t type = MyMessage_getType(&_msg);
+	if (MyMessage_getSender(&_msg) == GATEWAY_ADDRESS) {
 		if (type == I_REBOOT) {
 #if !defined(MY_DISABLE_REMOTE_RESET)
 			setIndication(INDICATION_REBOOT);
@@ -448,7 +419,7 @@ bool _processInternalCoreMessage(void)
 #endif
 		} else if (type == I_REGISTRATION_RESPONSE) {
 #if defined (MY_REGISTRATION_FEATURE) && !defined(MY_GATEWAY_FEATURE)
-			_coreConfig.nodeRegistered = _msg.getBool();
+			_coreConfig.nodeRegistered = MyMessage_getBool(&_msg);
 			setIndication(INDICATION_GOT_REGISTRATION);
 			CORE_DEBUG(PSTR("MCO:PIM:NODE REG=%" PRIu8 "\n"), _coreConfig.nodeRegistered);	// node registration
 #endif
@@ -462,16 +433,16 @@ bool _processInternalCoreMessage(void)
 			// Re-send node presentation to controller
 			presentNode();
 		} else if (type == I_HEARTBEAT_REQUEST) {
-			(void)sendHeartbeat();
+			(void)sendHeartbeat(false);
 		} else if (type == I_VERSION) {
 #if !defined(MY_GATEWAY_FEATURE)
-			(void)_sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
-			                       I_VERSION).set(MYSENSORS_LIBRARY_VERSION_INT));
+			(void)_sendRoute(MyMessage_setULong(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
+			                       I_VERSION,false),MYSENSORS_LIBRARY_VERSION_INT));
 #endif
 		} else if (type == I_TIME) {
 			// Deliver time to callback
 			if (receiveTime) {
-				receiveTime(_msg.getULong());
+				receiveTime(MyMessage_getULong(&_msg));
 			}
 		}  else if (type == I_CHILDREN) {
 			if (_msg.data[0] == 'C') {
@@ -479,7 +450,7 @@ bool _processInternalCoreMessage(void)
 				// Clears child relay data for this node
 				setIndication(INDICATION_CLEAR_ROUTING);
 				transportClearRoutingTable();
-				(void)_sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_CHILDREN).set("OK"));
+				(void)_sendRoute(MyMessage_setString(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_CHILDREN,false),"OK"));
 #endif
 			}
 		} else if (type == I_DEBUG) {
@@ -490,16 +461,16 @@ bool _processInternalCoreMessage(void)
 				transportReportRoutingTable();
 #endif
 			} else if (debug_msg == 'V') {	// CPU voltage
-				(void)_sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
-				                       I_DEBUG).set(hwCPUVoltage()));
+				(void)_sendRoute(MyMessage_setUInt(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
+				                       I_DEBUG,false),hwCPUVoltage()));
 			} else if (debug_msg == 'F') {	// CPU frequency in 1/10Mhz
-				(void)_sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
-				                       I_DEBUG).set(hwCPUFrequency()));
+				(void)_sendRoute(MyMessage_setUInt(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
+				                       I_DEBUG,false),hwCPUFrequency()));
 			} else if (debug_msg == 'M') {	// free memory
-				(void)_sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
-				                       I_DEBUG).set(hwFreeMem()));
+				(void)_sendRoute(MyMessage_setUInt(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
+				                       I_DEBUG,false),hwFreeMem()));
 			} else if (debug_msg == 'E') {	// clear MySensors eeprom area and reboot
-				(void)_sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_DEBUG).set("OK"));
+				(void)_sendRoute(MyMessage_setString(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL, I_DEBUG,false),"OK"));
 				for (uint16_t i = EEPROM_START; i<EEPROM_LOCAL_CONFIG_ADDRESS; i++) {
 					hwWriteConfig(i, 0xFF);
 				}
@@ -519,7 +490,7 @@ bool _processInternalCoreMessage(void)
 			bool approveRegistration;
 
 #if defined(MY_CORE_COMPATIBILITY_CHECK)
-			approveRegistration = (_msg.getByte() >= MY_CORE_MIN_VERSION);
+			approveRegistration = (MyMessage_getByte(&_msg) >= MY_CORE_MIN_VERSION);
 #else
 			// auto registration if version compatible
 			approveRegistration = true;
@@ -529,8 +500,8 @@ bool _processInternalCoreMessage(void)
 			// delay for fast GW and slow nodes
 			delay(5);
 #endif
-			(void)_sendRoute(build(_msgTmp, _msg.getSender(), NODE_SENSOR_ID, C_INTERNAL,
-			                       I_REGISTRATION_RESPONSE).set(approveRegistration));
+			(void)_sendRoute(MyMessage_setBool(build(&_msgTmp, MyMessage_getSender(&_msg), NODE_SENSOR_ID, C_INTERNAL,
+			                       I_REGISTRATION_RESPONSE,false),approveRegistration));
 #else
 			return false;	// processing of this request via controller
 #endif
@@ -570,7 +541,7 @@ void wait(const uint32_t waitingMS)
 #endif
 }
 
-bool wait(const uint32_t waitingMS, const mysensors_command_t cmd)
+bool wait2(const uint32_t waitingMS, const mysensors_command_t cmd)
 {
 #if defined(MY_DEBUG_VERBOSE_CORE)
 	if (waitLock) {
@@ -581,11 +552,11 @@ bool wait(const uint32_t waitingMS, const mysensors_command_t cmd)
 	const uint32_t enteringMS = hwMillis();
 	// invalidate cmd
 	//_msg.setCommand(!cmd);
-	_msg.setCommand(C_INVALID_7);
+	MyMessage_setCommand(&_msg,C_INVALID_7);
 	bool expectedResponse = false;
 	while ((hwMillis() - enteringMS < waitingMS) && !expectedResponse) {
 		_process();
-		expectedResponse = (_msg.getCommand() == cmd);
+		expectedResponse = (MyMessage_getCommand(&_msg) == cmd);
 	}
 #if defined(MY_DEBUG_VERBOSE_CORE)
 	waitLock--;
@@ -593,7 +564,7 @@ bool wait(const uint32_t waitingMS, const mysensors_command_t cmd)
 	return expectedResponse;
 }
 
-bool wait(const uint32_t waitingMS, const mysensors_command_t cmd, const uint8_t msgType)
+bool wait3(const uint32_t waitingMS, const mysensors_command_t cmd, const uint8_t msgType)
 {
 #if defined(MY_DEBUG_VERBOSE_CORE)
 	if (waitLock) {
@@ -604,11 +575,11 @@ bool wait(const uint32_t waitingMS, const mysensors_command_t cmd, const uint8_t
 	const uint32_t enteringMS = hwMillis();
 	// invalidate cmd
 	//_msg.setCommand(!cmd);
-	_msg.setCommand(C_INVALID_7);
+	MyMessage_setCommand(&_msg,C_INVALID_7);
 	bool expectedResponse = false;
 	while ( (hwMillis() - enteringMS < waitingMS) && !expectedResponse ) {
 		_process();
-		expectedResponse = (_msg.getCommand() == cmd && _msg.getType() == msgType);
+		expectedResponse = (MyMessage_getCommand(&_msg) == cmd && MyMessage_getType(&_msg) == msgType);
 	}
 #if defined(MY_DEBUG_VERBOSE_CORE)
 	waitLock--;
@@ -680,8 +651,8 @@ int8_t _sleep(const uint32_t sleepingMS, const bool smartSleep, const uint8_t in
 			return MY_SLEEP_NOT_POSSIBLE;
 		}
 		// notify controller about going to sleep, payload indicates smartsleep waiting time in MS
-		(void)_sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
-		                       I_PRE_SLEEP_NOTIFICATION).set((uint32_t)MY_SMART_SLEEP_WAIT_DURATION_MS));
+		(void)_sendRoute(MyMessage_setULong(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
+		                       I_PRE_SLEEP_NOTIFICATION,false),(uint32_t)MY_SMART_SLEEP_WAIT_DURATION_MS));
 		wait(MY_SMART_SLEEP_WAIT_DURATION_MS);		// listen for incoming messages
 #if defined(MY_OTA_FIRMWARE_FEATURE)
 		// check if during smart sleep waiting period a FOTA request was received
@@ -710,10 +681,10 @@ int8_t _sleep(const uint32_t sleepingMS, const bool smartSleep, const uint8_t in
 	int8_t result = MY_SLEEP_NOT_POSSIBLE;	// default
 	if (interrupt1 != INTERRUPT_NOT_DEFINED && interrupt2 != INTERRUPT_NOT_DEFINED) {
 		// both IRQs
-		result = hwSleep(interrupt1, mode1, interrupt2, mode2, sleepingTimeMS);
+		result = hwSleep5(interrupt1, mode1, interrupt2, mode2, sleepingTimeMS);
 	} else if (interrupt1 != INTERRUPT_NOT_DEFINED && interrupt2 == INTERRUPT_NOT_DEFINED) {
 		// one IRQ
-		result = hwSleep(interrupt1, mode1, sleepingTimeMS);
+		result = hwSleep3(interrupt1, mode1, sleepingTimeMS);
 	} else if (interrupt1 == INTERRUPT_NOT_DEFINED && interrupt2 == INTERRUPT_NOT_DEFINED) {
 		// no IRQ
 		result = hwSleep(sleepingTimeMS);
@@ -725,8 +696,8 @@ int8_t _sleep(const uint32_t sleepingMS, const bool smartSleep, const uint8_t in
 #endif
 	if (smartSleep) {
 		// notify controller about waking up, payload indicates sleeping time in MS
-		(void)_sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
-		                       I_POST_SLEEP_NOTIFICATION).set(sleepingTimeMS));
+		(void)_sendRoute(MyMessage_setULong(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID, C_INTERNAL,
+		                       I_POST_SLEEP_NOTIFICATION,false),sleepingTimeMS));
 	}
 	return result;
 #endif
@@ -735,16 +706,16 @@ int8_t _sleep(const uint32_t sleepingMS, const bool smartSleep, const uint8_t in
 // sleep functions
 int8_t sleep(const uint32_t sleepingMS, const bool smartSleep)
 {
-	return _sleep(sleepingMS, smartSleep);
+	return _sleep(sleepingMS, smartSleep,INTERRUPT_NOT_DEFINED,MODE_NOT_DEFINED,INTERRUPT_NOT_DEFINED,MODE_NOT_DEFINED);
 }
 
-int8_t sleep(const uint8_t interrupt, const uint8_t mode, const uint32_t sleepingMS,
+int8_t sleep4(const uint8_t interrupt, const uint8_t mode, const uint32_t sleepingMS,
              const bool smartSleep)
 {
-	return _sleep(sleepingMS, smartSleep, interrupt, mode);
+	return _sleep(sleepingMS, smartSleep, interrupt, mode,INTERRUPT_NOT_DEFINED,MODE_NOT_DEFINED);
 }
 
-int8_t sleep(const uint8_t interrupt1, const uint8_t mode1, const uint8_t interrupt2,
+int8_t sleep6(const uint8_t interrupt1, const uint8_t mode1, const uint8_t interrupt2,
              const uint8_t mode2, const uint32_t sleepingMS, const bool smartSleep)
 {
 	return _sleep(sleepingMS, smartSleep, interrupt1, mode1, interrupt2, mode2);
@@ -754,16 +725,16 @@ int8_t sleep(const uint8_t interrupt1, const uint8_t mode1, const uint8_t interr
 int8_t smartSleep(const uint32_t sleepingMS)
 {
 	// compatibility
-	return _sleep(sleepingMS, true);
+	return _sleep(sleepingMS, true,INTERRUPT_NOT_DEFINED,MODE_NOT_DEFINED,INTERRUPT_NOT_DEFINED,MODE_NOT_DEFINED);
 }
 
-int8_t smartSleep(const uint8_t interrupt, const uint8_t mode, const uint32_t sleepingMS)
+int8_t smartSleep3(const uint8_t interrupt, const uint8_t mode, const uint32_t sleepingMS)
 {
 	// compatibility
-	return _sleep(sleepingMS, true, interrupt, mode);
+	return _sleep(sleepingMS, true, interrupt, mode,INTERRUPT_NOT_DEFINED,MODE_NOT_DEFINED);
 }
 
-int8_t smartSleep(const uint8_t interrupt1, const uint8_t mode1, const uint8_t interrupt2,
+int8_t smartSleep5(const uint8_t interrupt1, const uint8_t mode1, const uint8_t interrupt2,
                   const uint8_t mode2, const uint32_t sleepingMS)
 {
 	// compatibility
@@ -786,7 +757,7 @@ void _nodeLock(const char *str)
 		CORE_DEBUG(PSTR("MCO:NLK:NODE LOCKED. TO UNLOCK, GND PIN %" PRIu8 " AND RESET\n"),
 		           MY_NODE_UNLOCK_PIN);
 		doYield();
-		(void)_sendRoute(build(_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID,C_INTERNAL, I_LOCKED).set(str));
+		(void)_sendRoute(MyMessage_setString(build(&_msgTmp, GATEWAY_ADDRESS, NODE_SENSOR_ID,C_INTERNAL, I_LOCKED,false),str));
 #if defined(MY_SENSOR_NETWORK)
 		transportSleep();
 		CORE_DEBUG(PSTR("MCO:NLK:TSL\n"));	// sleep transport

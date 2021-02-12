@@ -38,15 +38,15 @@
  * supported.
  *
  */
-void eeprom_update_block(uint16_t idx, uint8_t *ptr, size_t len)
+void eeprom_update_block(uint16_t __dst, const uint8_t *__src, size_t len)
 {
 	// make sure not to write data beyond the end of the EEPROM area
 	// (this could accidentally hit the option byte area)
-	if (idx >= EEPROM_end()) return;
-	if (len+idx > EEPROM_end()) {
-		len = EEPROM_end() - idx;
+	if (__dst >= EEPROM_end()) return;
+	if (len+__dst > EEPROM_end()) {
+		len = EEPROM_end() - __dst;
 	}
-	idx += (uint16_t)FLASH_DATA_START_PHYSICAL_ADDRESS;
+	__dst += (uint16_t)FLASH_DATA_START_PHYSICAL_ADDRESS;
 
 	eeprom_unlock();
 	if (eeprom_is_unlocked())
@@ -54,10 +54,10 @@ void eeprom_update_block(uint16_t idx, uint8_t *ptr, size_t len)
 		// write only after a successful unlock.
 		while (len--)
 		{
-			if ((*((uint8_t *) idx)) != *ptr)
-				*((uint8_t *) idx) = *ptr;
-			idx++;
-			ptr++;
+			if ((*((uint8_t *) __dst)) != *__src)
+				*((uint8_t *) __dst) = *__src;
+			__dst++;
+			__src++;
 		}
 		// re-lock the EEPROM again.
 		FLASH->IAPSR &= FLASH_FLAG_DUL;

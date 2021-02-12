@@ -27,7 +27,7 @@
  */
 
 // Enable debug prints to serial monitor
-#define MY_DEBUG
+//#define MY_DEBUG
 
 // Enable and select radio type attached
 #define MY_RADIO_RF24
@@ -38,6 +38,11 @@
 #define MY_NODE_ID 254
 
 #include <MySensors.h>
+// SDCC doesn't know weak functions
+void before(){}
+void preHwInit(){}
+
+void door();
 
 #define RADIO_ERROR_LED_PIN 4  // Error led pin
 #define RADIO_RX_LED_PIN    6  // Receive led pin
@@ -118,8 +123,10 @@ bool isArmed;
 #endif
 
 #ifdef ID_S_DOOR // V_TRIPPED, V_ARMED
-MyMessage msg_S_DOOR_T(ID_S_DOOR,V_TRIPPED);
-MyMessage msg_S_DOOR_A(ID_S_DOOR,V_ARMED);
+//MyMessage msg_S_DOOR_T(ID_S_DOOR,V_TRIPPED);
+//MyMessage msg_S_DOOR_A(ID_S_DOOR,V_ARMED);
+MyMessage msg_S_DOOR_T;
+MyMessage msg_S_DOOR_A;
 #endif
 
 #ifdef ID_S_MOTION // V_TRIPPED, V_ARMED
@@ -354,26 +361,30 @@ MyMessage msg_S_CUSTOM_5(ID_S_CUSTOM,V_VAR5);
 
 void setup()
 {
+	// MyMessage geen class, dus init moet hier:
+	MyMessage_init2(&msg_S_DOOR_T,ID_S_DOOR,V_TRIPPED);
+	MyMessage_init2(&msg_S_DOOR_A,ID_S_DOOR,V_ARMED);
+	
 	// Random SEED
 	randomSeed(analogRead(0));
 
 	wait(LONG_WAIT);
-	Serial.println("GW Started");
+	Serial_println_s("GW Started");
 }
 
 void presentation()
 {
 	// Send the Sketch Version Information to the Gateway
-	Serial.print("Send Sketch Info: ");
-	sendSketchInfo(SKETCH_NAME, SKETCH_VERSION);
-	Serial.print(SKETCH_NAME);
-	Serial.println(SKETCH_VERSION);
+	Serial_print_s("Send Sketch Info: ");
+	sendSketchInfo(SKETCH_NAME, SKETCH_VERSION,false);
+	Serial_print_s(SKETCH_NAME);
+	Serial_println_s(SKETCH_VERSION);
 	wait(LONG_WAIT);
 
 	// Get controller configuration
-	Serial.print("Get Config: ");
-	metric = getControllerConfig().isMetric;
-	Serial.println(metric ? "Metric":"Imperial");
+	Serial_print_s("Get Config: ");
+	metric = getControllerConfig()->isMetric;
+	Serial_println_s(metric ? "Metric":"Imperial");
 	wait(LONG_WAIT);
 
 	// Init Armed
@@ -382,12 +393,12 @@ void presentation()
 #endif
 
 	// Register all sensors to gw (they will be created as child devices)
-	Serial.println("Presenting Nodes");
-	Serial.println("________________");
+	Serial_println_s("Presenting Nodes");
+	Serial_println_s("________________");
 
 #ifdef ID_S_DOOR
-	Serial.println("  S_DOOR");
-	present(ID_S_DOOR,S_DOOR,"Outside Door");
+	Serial_println_s("  S_DOOR");
+	present(ID_S_DOOR,S_DOOR,"Outside Door",false);
 	wait(SHORT_WAIT);
 #endif
 
@@ -578,28 +589,30 @@ void presentation()
 
 
 
-	Serial.println("________________");
+	Serial_println_s("________________");
 
 }
 
 void loop()
 {
-	Serial.println("");
-	Serial.println("");
-	Serial.println("");
-	Serial.println("#########################");
-	randNumber=random(0,101);
+	Serial_println_s("");
+	Serial_println_s("");
+	Serial_println_s("");
+	Serial_println_s("#########################");
+	//randNumber=random(0,101);
+	//TODO STM8
+	randNumber = 45678;
 
-	Serial.print("RandomNumber:");
-	Serial.println(randNumber);
+	Serial_print_s("RandomNumber:");
+	Serial_println_u(randNumber);
 	// Send fake battery level
-	Serial.println("Send Battery Level");
-	sendBatteryLevel(randNumber);
+	Serial_println_s("Send Battery Level");
+	sendBatteryLevel(randNumber,false);
 	wait(LONG_WAIT);
 
 	// Request time
-	Serial.println("Request Time");
-	requestTime();
+	Serial_println_s("Request Time");
+	requestTime(false);
 	wait(LONG_WAIT);
 
 	//Read Sensors
@@ -734,9 +747,9 @@ void loop()
 	custom();
 #endif
 
-	sendBatteryLevel(randNumber);
+	sendBatteryLevel(randNumber,false);
 	wait(SHORT_WAIT);
-	Serial.println("#########################");
+	Serial_println_s("#########################");
 	wait(SLEEP_TIME); //sleep a bit
 }
 
@@ -744,8 +757,8 @@ void loop()
 void receiveTime(uint32_t controllerTime)
 {
 
-	Serial.print("Time value received: ");
-	Serial.println(controllerTime);
+	Serial_print_s("Time value received: ");
+	Serial_print_u(controllerTime);
 
 }
 
@@ -755,19 +768,19 @@ void receiveTime(uint32_t controllerTime)
 void door()
 {
 
-	Serial.print("Door is: " );
+	Serial_print_s("Door is: " );
 
 	if (randNumber <= 50) {
-		Serial.println("Open");
-		send(msg_S_DOOR_T.set((int16_t)1));
+		Serial_println_s("Open");
+		send(MyMessage_setInt(&msg_S_DOOR_T,1),false);
 	} else {
-		Serial.println("Closed");
-		send(msg_S_DOOR_T.set((int16_t)0));
+		Serial_println_s("Closed");
+		send(MyMessage_setInt(&msg_S_DOOR_T,0),false);
 	}
 #ifdef ID_S_ARMED
-	Serial.print("System is: " );
-	Serial.println((isArmed ? "Armed":"Disarmed"));
-	send(msg_S_DOOR_A.set(isArmed));
+	Serial_print_s("System is: " );
+	Serial_println_s(isArmed ? "Armed":"Disarmed");
+	send(MyMessage_setBool(&msg_S_DOOR_A,isArmed),false);
 #endif
 }
 #endif
@@ -1252,16 +1265,16 @@ void custom()
 #endif
 
 
-void receive(const MyMessage &message)
+void receive(const MyMessage *message)
 {
-	switch (message.getType()) {
+	switch (MyMessage_getType(message)) {
 #ifdef ID_S_ARMED
 	case V_ARMED:
-		isArmed = message.getBool();
-		Serial.print("Incoming change for ID_S_ARMED:");
-		Serial.print(message.getSensor());
-		Serial.print(", New status: ");
-		Serial.println((isArmed ? "Armed":"Disarmed" ));
+		isArmed = MyMessage_getBool(message);
+		Serial_print_s("Incoming change for ID_S_ARMED:");
+		Serial_print_u(MyMessage_getSensor(message));
+		Serial_print_s(", New status: ");
+		Serial_println_s((isArmed ? "Armed":"Disarmed" ));
 #ifdef ID_S_DOOR
 		door();//temp ack for door
 #endif
@@ -1508,8 +1521,8 @@ void receive(const MyMessage &message)
 #endif
 
 	default:
-		Serial.print("Unknown/Unimplemented message type: ");
-		Serial.println(message.getType());
+		Serial_print_s("Unknown/Unimplemented message type: ");
+		Serial_println_u(MyMessage_getType(message));
 	}
 
 }

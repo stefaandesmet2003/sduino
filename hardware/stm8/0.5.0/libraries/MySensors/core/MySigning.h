@@ -636,7 +636,7 @@ void signerInit(void);
  * @param msg Message buffer to use.
  * @param destination Node ID of the destination.
  */
-void signerPresentation(MyMessage &msg, uint8_t destination);
+void signerPresentation(MyMessage *msg, uint8_t destination);
 
 /**
  * @brief Manages internal signing message handshaking.
@@ -649,7 +649,7 @@ void signerPresentation(MyMessage &msg, uint8_t destination);
  * @param msg Message buffer to process.
  * @returns @c true if caller should stop further message processing.
  */
-bool signerProcessInternal(MyMessage &msg);
+bool signerProcessInternal(MyMessage *msg);
 
 /**
  * @brief Check timeout of verification session.
@@ -674,7 +674,7 @@ bool signerCheckTimer(void);
  * @param msg The message to get the nonce from.
  * @returns @c true if successful, else @c false.
  */
-bool signerPutNonce(MyMessage &msg);
+bool signerPutNonce(MyMessage *msg);
 
 /**
  * @brief Signs provided message. All remaining space in message payload buffer is used for
@@ -692,7 +692,7 @@ bool signerPutNonce(MyMessage &msg);
  * @param msg The message to sign.
  * @returns @c true if successful, else @c false.
 */
-bool signerSignMsg(MyMessage &msg);
+bool signerSignMsg(MyMessage *msg);
 
 /**
  * @brief Verifies signature in provided message.
@@ -709,7 +709,7 @@ bool signerSignMsg(MyMessage &msg);
  * @param msg The message to verify.
  * @returns @c true if successful, else @c false.
  */
-bool signerVerifyMsg(MyMessage &msg);
+bool signerVerifyMsg(MyMessage *msg);
 
 /**
  * @brief Do a timing neutral memory comparison.

@@ -138,12 +138,12 @@ void presentNode(void);
  * @return true Returns true if message reached the first stop on its way to destination.
  */
 bool present(const uint8_t sensorId, const mysensors_sensor_t sensorType,
-             const char *description = "",
-             const bool requestEcho = false);
+             const char *description /* = "" */,
+             const bool requestEcho);
 #if !defined(__linux__)
 bool present(const uint8_t childSensorId, const mysensors_sensor_t sensorType,
              const __FlashStringHelper *description,
-             const bool requestEcho = false);
+             const bool requestEcho);
 #endif
 /**
  * Sends sketch meta information to the gateway. Not mandatory but a nice thing to do.
@@ -155,10 +155,10 @@ bool present(const uint8_t childSensorId, const mysensors_sensor_t sensorType,
  * the message, with message.isEcho() set to true and sender/destination switched.
  * @return true Returns true if message reached the first stop on its way to destination.
  */
-bool sendSketchInfo(const char *name, const char *version, const bool requestEcho = false);
+bool sendSketchInfo(const char *name, const char *version, const bool requestEcho);
 #if !defined(__linux__)
 bool sendSketchInfo(const __FlashStringHelper *name, const __FlashStringHelper *version,
-                    const bool requestEcho = false);
+                    const bool requestEcho);
 #endif
 
 /**
@@ -170,7 +170,7 @@ bool sendSketchInfo(const __FlashStringHelper *name, const __FlashStringHelper *
  * the message, with message.isEcho() set to true and sender/destination switched.
  * @return true Returns true if message reached the first stop on its way to destination.
  */
-bool send(MyMessage &msg, const bool requestEcho = false);
+bool send(MyMessage *msg, const bool requestEcho);
 
 /**
  * Send this nodes battery level to gateway.
@@ -181,7 +181,7 @@ bool send(MyMessage &msg, const bool requestEcho = false);
  * the message, with message.isEcho() set to true and sender/destination switched.
  * @return true Returns true if message reached the first stop on its way to destination.
  */
-bool sendBatteryLevel(const uint8_t level, const bool requestEcho = false);
+bool sendBatteryLevel(const uint8_t level, const bool requestEcho);
 
 /**
  * Send a heartbeat message (I'm alive!) to the gateway/controller.
@@ -192,7 +192,7 @@ bool sendBatteryLevel(const uint8_t level, const bool requestEcho = false);
  * the message, with message.isEcho() set to true and sender/destination switched.
  * @return true Returns true if message reached the first stop on its way to destination.
  */
-bool sendHeartbeat(const bool requestEcho = false);
+bool sendHeartbeat(const bool requestEcho);
 
 /**
  * Send this nodes signal strength to gateway.
@@ -203,7 +203,7 @@ bool sendHeartbeat(const bool requestEcho = false);
  * the message, with message.isEcho() set to true and sender/destination switched.
  * @return true Returns true if message reached the first stop on its way to destination.
  */
-bool sendSignalStrength(const int16_t level, const bool requestEcho = false);
+bool sendSignalStrength(const int16_t level, const bool requestEcho);
 
 /**
  * Send this nodes TX power level to gateway.
@@ -214,7 +214,7 @@ bool sendSignalStrength(const int16_t level, const bool requestEcho = false);
  * the message, with message.isEcho() set to true and sender/destination switched.
  * @return true Returns true if message reached the first stop on its way to destination.
  */
-bool sendTXPowerLevel(const uint8_t level, const bool requestEcho = false);
+bool sendTXPowerLevel(const uint8_t level, const bool requestEcho);
 
 /**
 * Requests a value from gateway or some other sensor in the radio network.
@@ -226,7 +226,7 @@ bool sendTXPowerLevel(const uint8_t level, const bool requestEcho = false);
 * @return true Returns true if message reached the first stop on its way to destination.
 */
 bool request(const uint8_t childSensorId, const uint8_t variableType,
-             const uint8_t destination = GATEWAY_ADDRESS);
+             const uint8_t destination /* = GATEWAY_ADDRESS */);
 
 /**
  * Requests time from controller. Answer will be delivered to receiveTime function in sketch.
@@ -236,12 +236,12 @@ bool request(const uint8_t childSensorId, const uint8_t variableType,
  * the message, with message.isEcho() set to true and sender/destination switched.
  * @return true Returns true if message reached the first stop on its way to destination.
  */
-bool requestTime(const bool requestEcho = false);
+bool requestTime(const bool requestEcho);
 
 /**
  * Returns the most recent node configuration received from controller
  */
-controllerConfig_t getControllerConfig(void);
+controllerConfig_t *getControllerConfig(void);
 
 /**
  * Save a state (in local EEPROM). Good for actuators to "remember" state between
@@ -281,7 +281,7 @@ void wait(const uint32_t waitingMS);
  * @param cmd Command of incoming message.
  * @return True if specified message received
  */
-bool wait(const uint32_t waitingMS, const mysensors_command_t cmd);
+bool wait2(const uint32_t waitingMS, const mysensors_command_t cmd);
 
 /**
  * Wait for a specified amount of time to pass or until specified message received.  Keeps process()ing.
@@ -293,7 +293,7 @@ bool wait(const uint32_t waitingMS, const mysensors_command_t cmd);
  * @param msgtype Message type.
  * @return True if specified message received
  */
-bool wait(const uint32_t waitingMS, const mysensors_command_t cmd, const uint8_t msgtype);
+bool wait3(const uint32_t waitingMS, const mysensors_command_t cmd, const uint8_t msgtype);
 
 /**
  * Function to allow scheduler to do some work.
@@ -308,7 +308,7 @@ void doYield(void);
  * @param smartSleep Set True if sending heartbeat and process incoming messages before going to sleep.
  * @return @ref MY_WAKE_UP_BY_TIMER if timer woke it up, @ref MY_SLEEP_NOT_POSSIBLE if not possible (e.g. ongoing FW update)
  */
-int8_t sleep(const uint32_t sleepingMS, const bool smartSleep = false);
+int8_t sleep(const uint32_t sleepingMS, const bool smartSleep);
 
 /**
  * Sleep (PowerDownMode) the MCU and radio. Wake up on timer or pin change.
@@ -320,8 +320,8 @@ int8_t sleep(const uint32_t sleepingMS, const bool smartSleep = false);
  * @param smartSleep Set True if sending heartbeat and process incoming messages before going to sleep
  * @return Interrupt number if wake up was triggered by pin change, @ref MY_WAKE_UP_BY_TIMER if wake up was triggered by timer, @ref MY_SLEEP_NOT_POSSIBLE if sleep was not possible (e.g. ongoing FW update)
  */
-int8_t sleep(const uint8_t interrupt, const uint8_t mode, const uint32_t sleepingMS = 0,
-             const bool smartSleep = false);
+int8_t sleep4(const uint8_t interrupt, const uint8_t mode, const uint32_t sleepingMS /* = 0 */,
+             const bool smartSleep);
 
 /**
  * Sleep (PowerDownMode) the MCU and radio. Wake up on timer or pin change for two separate interrupts.
@@ -335,8 +335,8 @@ int8_t sleep(const uint8_t interrupt, const uint8_t mode, const uint32_t sleepin
  * @param smartSleep Set True if sending heartbeat and process incoming messages before going to sleep.
  * @return Interrupt number if wake up was triggered by pin change, @ref MY_WAKE_UP_BY_TIMER if wake up was triggered by timer, @ref MY_SLEEP_NOT_POSSIBLE if sleep was not possible (e.g. ongoing FW update)
  */
-int8_t sleep(const uint8_t interrupt1, const uint8_t mode1, const uint8_t interrupt2,
-             const uint8_t mode2, const uint32_t sleepingMS = 0, const bool smartSleep = false);
+int8_t sleep6(const uint8_t interrupt1, const uint8_t mode1, const uint8_t interrupt2,
+             const uint8_t mode2, const uint32_t sleepingMS /* = 0 */, const bool smartSleep);
 
 /**
 * \deprecated Use sleep(ms, true) instead
@@ -356,7 +356,7 @@ int8_t smartSleep(const uint32_t sleepingMS);
 * @param sleepingMS Number of milliseconds to sleep or 0 to sleep forever
 * @return Interrupt number if wake up was triggered by pin change, @ref MY_WAKE_UP_BY_TIMER if wake up was triggered by timer, @ref MY_SLEEP_NOT_POSSIBLE if sleep was not possible (e.g. ongoing FW update)
 */
-int8_t smartSleep(const uint8_t interrupt, const uint8_t mode, const uint32_t sleepingMS = 0);
+int8_t smartSleep3(const uint8_t interrupt, const uint8_t mode, const uint32_t sleepingMS /* = 0 */);
 
 /**
 * \deprecated Use sleep(interrupt1, mode1, interrupt2, mode2, ms, true) instead
@@ -369,8 +369,8 @@ int8_t smartSleep(const uint8_t interrupt, const uint8_t mode, const uint32_t sl
 * @param sleepingMS Number of milliseconds to sleep or 0 to sleep forever
 * @return Interrupt number if wake up was triggered by pin change, @ref MY_WAKE_UP_BY_TIMER if wake up was triggered by timer, @ref MY_SLEEP_NOT_POSSIBLE if sleep was not possible (e.g. ongoing FW update)
 */
-int8_t smartSleep(const uint8_t interrupt1, const uint8_t mode1, const uint8_t interrupt2,
-                  const uint8_t mode2, const uint32_t sleepingMS = 0);
+int8_t smartSleep5(const uint8_t interrupt1, const uint8_t mode1, const uint8_t interrupt2,
+                  const uint8_t mode2, const uint32_t sleepingMS /* = 0 */);
 
 /**
 * Sleep (PowerDownMode) the MCU and radio. Wake up on timer or pin change for two separate interrupts.
@@ -384,9 +384,9 @@ int8_t smartSleep(const uint8_t interrupt1, const uint8_t mode1, const uint8_t i
 * @param smartSleep (optional) Set True if sending heartbeat and process incoming messages before going to sleep.
 * @return Interrupt number if wake up was triggered by pin change, @ref MY_WAKE_UP_BY_TIMER if wake up was triggered by timer, @ref MY_SLEEP_NOT_POSSIBLE if sleep was not possible (e.g. ongoing FW update)
 */
-int8_t _sleep(const uint32_t sleepingMS, const bool smartSleep = false,
-              const uint8_t interrupt1 = INTERRUPT_NOT_DEFINED, const uint8_t mode1 = MODE_NOT_DEFINED,
-              const uint8_t interrupt2 = INTERRUPT_NOT_DEFINED, const uint8_t mode2 = MODE_NOT_DEFINED);
+int8_t _sleep(const uint32_t sleepingMS, const bool smartSleep,
+              const uint8_t interrupt1 /* = INTERRUPT_NOT_DEFINED */, const uint8_t mode1 /* = MODE_NOT_DEFINED */,
+              const uint8_t interrupt2 /* = INTERRUPT_NOT_DEFINED */, const uint8_t mode2 /* = MODE_NOT_DEFINED */);
 
 /**
  * Return the sleep time remaining after waking up from sleep.
@@ -447,11 +447,11 @@ void _registerNode(void);
 * @param message
 * @return true Returns true if message reached the first stop on its way to destination.
 */
-bool _sendRoute(MyMessage &message);
+bool _sendRoute(MyMessage *message);
 /**
 * @brief Callback for incoming messages
 */
-void receive(const MyMessage&) __attribute__((weak));
+void receive(const MyMessage*) __attribute__((weak));
 /**
 * @brief Callback for incoming time messages
 */
@@ -479,28 +479,28 @@ void loop(void) __attribute__((weak));
 
 
 // Inline function and macros
-static inline MyMessage& build(MyMessage &msg, const uint8_t destination, const uint8_t sensor,
-                               const mysensors_command_t command, const uint8_t type, const bool requestEcho = false)
+static inline MyMessage* build(MyMessage *msg, const uint8_t destination, const uint8_t sensor,
+                               const mysensors_command_t command, const uint8_t type, const bool requestEcho)
 {
-	msg.setSender(getNodeId());
-	msg.setDestination(destination);
-	msg.setSensor(sensor);
-	msg.setType(type);
-	msg.setCommand(command);
-	msg.setRequestEcho(requestEcho);
-	msg.setEcho(false);
+	MyMessage_setSender(msg,getNodeId());
+	MyMessage_setDestination(msg,destination);
+	MyMessage_setSensor(msg,sensor);
+	MyMessage_setType(msg,type);
+	MyMessage_setCommand(msg,command);
+	MyMessage_setRequestEcho(msg,requestEcho);
+	MyMessage_setEcho(msg,false);
 	return msg;
 }
 
-static inline MyMessage& buildGw(MyMessage &msg, const uint8_t type)
+static inline MyMessage* buildGw(MyMessage *msg, const uint8_t type)
 {
-	msg.setSender(GATEWAY_ADDRESS);
-	msg.setDestination(GATEWAY_ADDRESS);
-	msg.setSensor(NODE_SENSOR_ID);
-	msg.setType(type);
-	msg.setCommand(C_INTERNAL);
-	msg.setRequestEcho(false);
-	msg.setEcho(false);
+	MyMessage_setSender(msg, GATEWAY_ADDRESS);
+	MyMessage_setDestination(msg, GATEWAY_ADDRESS);
+	MyMessage_setSensor(msg, NODE_SENSOR_ID);
+	MyMessage_setType(msg, type);
+	MyMessage_setCommand(msg, C_INTERNAL);
+	MyMessage_setRequestEcho(msg, false);
+	MyMessage_setEcho(msg, false);
 	return msg;
 }
 

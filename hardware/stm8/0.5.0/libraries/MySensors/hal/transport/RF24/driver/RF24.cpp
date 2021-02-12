@@ -62,57 +62,30 @@ LOCAL uint8_t RF24_spiMultiByteTransfer(const uint8_t cmd, uint8_t *buf, uint8_t
 	uint8_t status;
 	uint8_t *current = buf;
 #if !defined(MY_SOFTSPI) && defined(SPI_HAS_TRANSACTION)
-	RF24_SPI.beginTransaction(SPISettings(MY_RF24_SPI_SPEED, RF24_SPI_DATA_ORDER,
+	SPI_beginTransaction(SPISettings(MY_RF24_SPI_SPEED, RF24_SPI_DATA_ORDER,
 	                                      RF24_SPI_DATA_MODE));
 #endif
 
 	RF24_csn(LOW);
 	// timing
 	delayMicroseconds(10);
-#ifdef __linux__
-	uint8_t *prx = RF24_spi_rxbuff;
-	uint8_t *ptx = RF24_spi_txbuff;
-	uint8_t size = len + 1; // Add register value to transmit buffer
 
-	*ptx++ = cmd;
+	status = SPI_transfer(cmd);
 	while ( len-- ) {
 		if (readMode) {
-			*ptx++ = RF24_CMD_NOP;
-		} else {
-			*ptx++ = *current++;
-		}
-	}
-	RF24_SPI.transfernb( (char *) RF24_spi_txbuff, (char *) RF24_spi_rxbuff, size);
-	if (readMode) {
-		if (size == 2) {
-			status = *++prx;   // result is 2nd byte of receive buffer
-		} else {
-			status = *prx++; // status is 1st byte of receive buffer
-			// decrement before to skip status byte
-			while (--size && (buf != NULL)) {
-				*buf++ = *prx++;
-			}
-		}
-	} else {
-		status = *prx; // status is 1st byte of receive buffer
-	}
-#else
-	status = RF24_SPI.transfer(cmd);
-	while ( len-- ) {
-		if (readMode) {
-			status = RF24_SPI.transfer(RF24_CMD_NOP);
+			status = SPI_transfer(RF24_CMD_NOP);
 			if (buf != NULL) {
 				*current++ = status;
 			}
 		} else {
-			(void)RF24_SPI.transfer(*current++);
+			(void)SPI_transfer(*current++);
 		}
 	}
-#endif
+
 
 	RF24_csn(HIGH);
 #if !defined(MY_SOFTSPI) && defined(SPI_HAS_TRANSACTION)
-	RF24_SPI.endTransaction();
+	SPI_endTransaction();
 #endif
 	// timing
 	delayMicroseconds(10);
@@ -422,7 +395,7 @@ LOCAL bool RF24_setTxPowerLevel(const uint8_t newPowerLevel)
 
 LOCAL bool RF24_setTxPowerPercent(const uint8_t newPowerPercent)
 {
-	const uint8_t newPowerLevel = static_cast<uint8_t>(RF24_MIN_POWER_LEVEL + (RF24_MAX_POWER_LEVEL
+	const uint8_t newPowerLevel = (uint8_t)(RF24_MIN_POWER_LEVEL + (RF24_MAX_POWER_LEVEL
 	                              - RF24_MIN_POWER_LEVEL) * (newPowerPercent / 100.0f));
 	return RF24_setTxPowerLevel(newPowerLevel);
 }
@@ -431,7 +404,7 @@ LOCAL int16_t RF24_getSendingRSSI(void)
 	// calculate pseudo-RSSI based on retransmission counter (ARC)
 	// min -104dBm at 250kBps
 	// Arbitrary definition: ARC 0 == -29, ARC 15 = -104
-	return static_cast<int16_t>(-29 - (8 * (RF24_getObserveTX() & 0xF)));
+	return (int16_t)(-29 - (8 * (RF24_getObserveTX() & 0xF)));
 }
 
 LOCAL void RF24_enableConstantCarrierWave(void)
@@ -529,12 +502,12 @@ LOCAL bool RF24_initialize(void)
 	RF24_csn(HIGH);
 
 	// Initialize SPI
-	RF24_SPI.begin();
+	SPI_begin();
 #if defined(MY_RX_MESSAGE_BUFFER_FEATURE)
 	// assure SPI can be used from interrupt context
 	// Note: ESP8266 & SoftSPI currently do not support interrupt usage for SPI,
 	// therefore it is unsafe to use MY_RF24_IRQ_PIN with ESP8266/SoftSPI!
-	RF24_SPI.usingInterrupt(digitalPinToInterrupt(MY_RF24_IRQ_PIN));
+	SPI_usingInterrupt(digitalPinToInterrupt(MY_RF24_IRQ_PIN));
 	// attach interrupt
 	attachInterrupt(digitalPinToInterrupt(MY_RF24_IRQ_PIN), RF24_irqHandler, FALLING);
 #endif

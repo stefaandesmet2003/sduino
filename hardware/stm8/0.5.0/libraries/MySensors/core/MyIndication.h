@@ -75,6 +75,6 @@ void setIndication( const indication_t ind );
 /**
  * Allow user to define their own indication handler.
  */
-void indication( const indication_t );
+void indication( const indication_t ind );
 
 #endif

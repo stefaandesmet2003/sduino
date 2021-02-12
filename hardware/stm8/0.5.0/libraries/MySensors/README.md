@@ -1,4 +1,8 @@
 MySensors Library v2.3.2
+adapted to C for sduino, compiles, but is too big for a 8kB device
+PassiveNode example is +- 15kB
+And so, not tested
+
 
 Please visit www.mysensors.org for more information
 

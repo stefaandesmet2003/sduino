@@ -76,6 +76,10 @@
 #elif defined(__arm__) && defined(TEENSYDUINO)
 #include "hal/architecture/Teensy3/MyHwTeensy3.cpp"
 #include "hal/crypto/generic/MyCryptoGeneric.cpp"
+#elif defined(ARDUINO_ARCH_STM8)
+#include "hal/architecture/STM8/MyHwSTM8.cpp"
+#include "hal/crypto/STM8/MyCryptoSTM8.cpp"
+
 #elif defined(__linux__)
 #include "hal/architecture/Linux/MyHwLinuxGeneric.cpp"
 #include "hal/crypto/generic/MyCryptoGeneric.cpp"

@@ -29,7 +29,7 @@
 
 /* --- Arduino-like interface -------------------------------------------- */
 
-void EEPROM_write( int idx, uint8_t val )
+void EEPROM_write( uint16_t idx, uint8_t val )
 {
 	eeprom_unlock();
 	if (eeprom_is_unlocked())

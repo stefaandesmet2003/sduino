@@ -45,25 +45,36 @@
 
 #define CHILD_ID 0   // Id of the sensor child
 
+// SDCC doesn't know weak functions
+void before(){}
+void preHwInit(){}
+void receiveTime(uint32_t controllerTime){}
+void receive(const MyMessage *message){}
+
+
 // Initialize general message
-MyMessage msg(CHILD_ID, V_TEMP);
+//MyMessage msg(CHILD_ID, V_TEMP);
+MyMessage msg;
 
 void setup()
 {
+	// MyMessage geen class, dus init moet hier:
+	MyMessage_init2(&msg,CHILD_ID,V_TEMP);
 }
 
 void presentation()
 {
 	// Send the sketch version information to the gateway and controller
-	sendSketchInfo("Passive node", "1.0");
+	sendSketchInfo("Passive node", "1.0",false);
 
 	// Register all sensors to gw (they will be created as child devices)
-	present(CHILD_ID, S_TEMP);
+	present(CHILD_ID, S_TEMP,"", false);
 }
 
 void loop()
 {
 	// generate some random data
-	send(msg.set(25.0+random(0,30)/10.0,2));
-	sleep(2000);
+	//send(msg.set(25.0+random(0,30)/10.0,2));
+	send (MyMessage_setLong(&msg,25),false);
+	sleep(2000,false);
 }

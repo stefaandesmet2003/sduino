@@ -36,12 +36,12 @@
  * supported.
  *
  */
-void eeprom_read_block(const uint16_t idx, uint8_t *ptr, size_t len)
+void eeprom_read_block(const uint16_t __src, uint8_t *__dst, size_t len)
 {
 	// make sure not to read data beyond the end of the EEPROM area
-	if (idx > E2END) return;
-	if (len+idx > EEPROM_end()) {
-		len = EEPROM_end() - idx;
+	if (__src > E2END) return;
+	if (len+__src > EEPROM_end()) {
+		len = EEPROM_end() - __src;
 	}
-	memcpy(ptr, (void*)(((uint16_t)FLASH_DATA_START_PHYSICAL_ADDRESS)+idx), len);
+	memcpy(__dst, (void*)(((uint16_t)FLASH_DATA_START_PHYSICAL_ADDRESS)+__src), len);
 }

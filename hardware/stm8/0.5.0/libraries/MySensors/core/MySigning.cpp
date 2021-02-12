@@ -66,10 +66,10 @@ enum { SIGN_WAITING_FOR_NONCE = 0, SIGN_OK = 1 };
 #if defined(MY_SIGNING_SOFT)
 extern bool signerAtsha204SoftInit(void);
 extern bool signerAtsha204SoftCheckTimer(void);
-extern bool signerAtsha204SoftGetNonce(MyMessage &msg);
-extern void signerAtsha204SoftPutNonce(MyMessage &msg);
-extern bool signerAtsha204SoftVerifyMsg(MyMessage &msg);
-extern bool signerAtsha204SoftSignMsg(MyMessage &msg);
+extern bool signerAtsha204SoftGetNonce(MyMessage *msg);
+extern void signerAtsha204SoftPutNonce(MyMessage *msg);
+extern bool signerAtsha204SoftVerifyMsg(MyMessage *msg);
+extern bool signerAtsha204SoftSignMsg(MyMessage *msg);
 #define signerBackendInit       signerAtsha204SoftInit
 #define signerBackendCheckTimer signerAtsha204SoftCheckTimer
 #define signerBackendGetNonce   signerAtsha204SoftGetNonce
@@ -79,10 +79,10 @@ extern bool signerAtsha204SoftSignMsg(MyMessage &msg);
 #elif defined(MY_SIGNING_ATSHA204)
 extern bool signerAtsha204Init(void);
 extern bool signerAtsha204CheckTimer(void);
-extern bool signerAtsha204GetNonce(MyMessage &msg);
-extern void signerAtsha204PutNonce(MyMessage &msg);
-extern bool signerAtsha204VerifyMsg(MyMessage &msg);
-extern bool signerAtsha204SignMsg(MyMessage &msg);
+extern bool signerAtsha204GetNonce(MyMessage *msg);
+extern void signerAtsha204PutNonce(MyMessage *msg);
+extern bool signerAtsha204VerifyMsg(MyMessage *msg);
+extern bool signerAtsha204SignMsg(MyMessage *msg);
 #define signerBackendInit       signerAtsha204Init
 #define signerBackendCheckTimer signerAtsha204CheckTimer
 #define signerBackendGetNonce   signerAtsha204GetNonce
@@ -90,14 +90,14 @@ extern bool signerAtsha204SignMsg(MyMessage &msg);
 #define signerBackendVerifyMsg  signerAtsha204VerifyMsg
 #define signerBackendSignMsg    signerAtsha204SignMsg
 #endif
-static bool skipSign(MyMessage &msg);
+static bool skipSign(MyMessage *msg);
 #else // not MY_SIGNING_FEATURE
 #define signerBackendCheckTimer() true
 #endif // MY_SIGNING_FEATURE
-static void prepareSigningPresentation(MyMessage &msg, uint8_t destination);
-static bool signerInternalProcessPresentation(MyMessage &msg);
-static bool signerInternalProcessNonceRequest(MyMessage &msg);
-static bool signerInternalProcessNonceResponse(MyMessage &msg);
+static void prepareSigningPresentation(MyMessage *msg, uint8_t destination);
+static bool signerInternalProcessPresentation(MyMessage *msg);
+static bool signerInternalProcessNonceRequest(MyMessage *msg);
+static bool signerInternalProcessNonceResponse(MyMessage *msg);
 #if (defined(MY_ENCRYPTION_FEATURE) || defined(MY_SIGNING_FEATURE)) &&\
     !defined(MY_SIGNING_SIMPLE_PASSWD)
 static bool signerInternalValidatePersonalization(void);
@@ -138,18 +138,18 @@ void signerInit(void)
 #endif
 }
 
-void signerPresentation(MyMessage &msg, uint8_t destination)
+void signerPresentation(MyMessage *msg, uint8_t destination)
 {
 	prepareSigningPresentation(msg, destination);
 
 #if defined(MY_SIGNING_REQUEST_SIGNATURES)
-	msg.data[1] |= SIGNING_PRESENTATION_REQUIRE_SIGNATURES;
+	msg->data[1] |= SIGNING_PRESENTATION_REQUIRE_SIGNATURES;
 	SIGN_DEBUG(PSTR("SGN:PRE:SGN REQ\n")); // Signing required
 #else
 	SIGN_DEBUG(PSTR("SGN:PRE:SGN NREQ\n")); // Signing not required
 #endif
 #if defined(MY_SIGNING_NODE_WHITELISTING)
-	msg.data[1] |= SIGNING_PRESENTATION_REQUIRE_WHITELISTING;
+	msg->data[1] |= SIGNING_PRESENTATION_REQUIRE_WHITELISTING;
 	SIGN_DEBUG(PSTR("SGN:PRE:WHI REQ\n")); // Whitelisting required
 #else
 	SIGN_DEBUG(PSTR("SGN:PRE:WHI NREQ\n")); // Whitelisting not required
@@ -164,14 +164,14 @@ void signerPresentation(MyMessage &msg, uint8_t destination)
 
 	if (destination == GATEWAY_ADDRESS) {
 		SIGN_DEBUG(PSTR("SGN:PRE:WAIT GW\n")); // Waiting for GW to send signing preferences...
-		wait(2000, C_INTERNAL, I_SIGNING_PRESENTATION);
+		wait3(2000, C_INTERNAL, I_SIGNING_PRESENTATION);
 	}
 }
 
-bool signerProcessInternal(MyMessage &msg)
+bool signerProcessInternal(MyMessage *msg)
 {
 	bool ret;
-	switch (msg.getType()) {
+	switch (MyMessage_getType(msg)) {
 	case I_SIGNING_PRESENTATION:
 		ret = signerInternalProcessPresentation(msg);
 		break;
@@ -193,13 +193,13 @@ bool signerCheckTimer(void)
 	return signerBackendCheckTimer();
 }
 
-bool signerSignMsg(MyMessage &msg)
+bool signerSignMsg(MyMessage *msg)
 {
 #if defined(MY_SIGNING_FEATURE)
 	bool ret;
 	// If destination is known to require signed messages and we are the sender,
 	// sign this message unless it is identified as an exception
-	if (DO_SIGN(msg.getDestination()) && msg.getSender() == getNodeId()) {
+	if (DO_SIGN(MyMessage_getDestination(msg)) && MyMessage_getSender(msg) == getNodeId()) {
 		if (skipSign(msg)) {
 			ret = true;
 		} else {
@@ -210,17 +210,17 @@ bool signerSignMsg(MyMessage &msg)
 			} else {
 				// Send nonce-request
 				_signingNonceStatus=SIGN_WAITING_FOR_NONCE;
-				if (!_sendRoute(build(_msgSign, msg.getDestination(), msg.getSensor(), C_INTERNAL,
-				                      I_NONCE_REQUEST).set(""))) {
+				if (!_sendRoute(MyMessage_setString(build(&_msgSign, MyMessage_getDestination(msg), MyMessage_getSensor(msg), C_INTERNAL,
+				                      I_NONCE_REQUEST),""))) {
 					SIGN_DEBUG(PSTR("!SGN:SGN:NCE REQ,TO=%" PRIu8 " FAIL\n"),
-					           msg.getDestination()); // Failed to transmit nonce request!
+					           MyMessage_getDestination(msg)); // Failed to transmit nonce request!
 					ret = false;
 				} else {
-					SIGN_DEBUG(PSTR("SGN:SGN:NCE REQ,TO=%" PRIu8 "\n"), msg.getDestination()); // Nonce requested
+					SIGN_DEBUG(PSTR("SGN:SGN:NCE REQ,TO=%" PRIu8 "\n"), MyMessage_getDestination(msg)); // Nonce requested
 					// We have to wait for the nonce to arrive before we can sign our original message
 					// Other messages could come in-between. We trust _process() takes care of them
 					unsigned long enter = hwMillis();
-					_msgSign = msg; // Copy the message to sign since buffer might be touched in _process()
+					_msgSign = *msg; // Copy the message to sign since buffer might be touched in _process()
 					while (hwMillis() - enter < MY_VERIFICATION_TIMEOUT_MS &&
 					        _signingNonceStatus==SIGN_WAITING_FOR_NONCE) {
 						_process();
@@ -231,7 +231,7 @@ bool signerSignMsg(MyMessage &msg)
 					} else {
 						if (_signingNonceStatus == SIGN_OK) {
 							// process() received a nonce and signerProcessInternal successfully signed the message
-							msg = _msgSign; // Write the signed message back
+							*msg = _msgSign; // Write the signed message back
 							SIGN_DEBUG(PSTR("SGN:SGN:SGN\n")); // Message to send has been signed
 							ret = true;
 							// After this point, only the 'last' member of the message structure is allowed to be
@@ -245,13 +245,13 @@ bool signerSignMsg(MyMessage &msg)
 				}
 			}
 		}
-	} else if (getNodeId() == msg.getSender()) {
-		msg.setSigned(false); // Message is not supposed to be signed, make sure it is marked unsigned
+	} else if (getNodeId() == MyMessage_getSender(msg)) {
+		MyMessage_setSigned(msg,false); // Message is not supposed to be signed, make sure it is marked unsigned
 		SIGN_DEBUG(PSTR("SGN:SGN:NREQ=%" PRIu8 "\n"),
-		           msg.getDestination()); // Do not sign message as it is not req
+		           MyMessage_getDestination(msg)); // Do not sign message as it is not req
 		ret = true;
 	} else {
-		SIGN_DEBUG(PSTR("SGN:SGN:%" PRIu8 "!=%" PRIu8 " NUS\n"), msg.getSender(),
+		SIGN_DEBUG(PSTR("SGN:SGN:%" PRIu8 "!=%" PRIu8 " NUS\n"), MyMessage_getSender(msg),
 		           getNodeId()); // Will not sign message since it was from someone else
 		ret = true;
 	}
@@ -263,7 +263,7 @@ bool signerSignMsg(MyMessage &msg)
 
 }
 
-bool signerVerifyMsg(MyMessage &msg)
+bool signerVerifyMsg(MyMessage *msg)
 {
 	bool verificationResult = true;
 	// Before processing message, reject unsigned messages if signing is required and check signature
@@ -273,14 +273,14 @@ bool signerVerifyMsg(MyMessage &msg)
 	// If we are a node, or we are a gateway and the sender require signatures (or just a strict gw)
 	// and we are the destination...
 #if defined(MY_SIGNING_WEAK_SECURITY)
-	if ((!MY_IS_GATEWAY || DO_SIGN(msg.getSender())) && msg.getDestination() == getNodeId()) {
+	if ((!MY_IS_GATEWAY || DO_SIGN(MyMessage_getSender(msg))) && MyMessage_getDestination(msg) == getNodeId()) {
 #else
-	if (msg.getDestination() == getNodeId()) {
+	if (MyMessage_getDestination(msg) == getNodeId()) {
 #endif
 		// Internal messages of certain types are not verified
 		if (skipSign(msg)) {
 			verificationResult = true;
-		} else if (!msg.getSigned()) {
+		} else if (!MyMessage_getSigned(msg)) {
 			// Got unsigned message that should have been signed
 			SIGN_DEBUG(PSTR("!SGN:VER:NSG\n")); // Message is not signed, but it should have been!
 			verificationResult = false;
@@ -310,7 +310,7 @@ bool signerVerifyMsg(MyMessage &msg)
 				}
 			}
 #endif
-			msg.setSigned(false); // Clear the sign-flag now as verification is completed
+			MyMessage_setSigned(msg,false); // Clear the sign-flag now as verification is completed
 		}
 	}
 #else
@@ -351,60 +351,60 @@ int signerMemcmp(const void* a, const void* b, size_t sz)
 
 #if defined(MY_SIGNING_FEATURE)
 // Helper function to centralize signing/verification exceptions
-static bool skipSign(MyMessage &msg)
+static bool skipSign(MyMessage *msg)
 {
 	bool ret = false;
-	if (msg.isEcho()) {
+	if (MyMessage_isEcho(msg)) {
 		ret = true;
-	}	else if (msg.getCommand() == C_INTERNAL &&
-	             (msg.getType() == I_SIGNING_PRESENTATION	||
-	              msg.getType() == I_REGISTRATION_REQUEST	||
-	              msg.getType() == I_NONCE_REQUEST					|| msg.getType() == I_NONCE_RESPONSE				||
-	              msg.getType() == I_ID_REQUEST						|| msg.getType() == I_ID_RESPONSE					||
-	              msg.getType() == I_FIND_PARENT_REQUEST		|| msg.getType() == I_FIND_PARENT_RESPONSE	||
-	              msg.getType() == I_HEARTBEAT_REQUEST			|| msg.getType() == I_HEARTBEAT_RESPONSE		||
-	              msg.getType() == I_PING									|| msg.getType() == I_PONG									||
-	              msg.getType() == I_DISCOVER_REQUEST	    || msg.getType() == I_DISCOVER_RESPONSE    ||
-	              msg.getType() == I_LOG_MESSAGE)) {
+	}	else if (MyMessage_getCommand(msg) == C_INTERNAL &&
+	             (MyMessage_getType(msg) == I_SIGNING_PRESENTATION	||
+	              MyMessage_getType(msg) == I_REGISTRATION_REQUEST	||
+	              MyMessage_getType(msg) == I_NONCE_REQUEST					|| MyMessage_getType(msg) == I_NONCE_RESPONSE				||
+	              MyMessage_getType(msg) == I_ID_REQUEST						|| MyMessage_getType(msg) == I_ID_RESPONSE					||
+	              MyMessage_getType(msg) == I_FIND_PARENT_REQUEST		|| MyMessage_getType(msg) == I_FIND_PARENT_RESPONSE	||
+	              MyMessage_getType(msg) == I_HEARTBEAT_REQUEST			|| MyMessage_getType(msg) == I_HEARTBEAT_RESPONSE		||
+	              MyMessage_getType(msg) == I_PING									|| MyMessage_getType(msg) == I_PONG									||
+	              MyMessage_getType(msg) == I_DISCOVER_REQUEST	    || MyMessage_getType(msg) == I_DISCOVER_RESPONSE    ||
+	              MyMessage_getType(msg) == I_LOG_MESSAGE)) {
 		ret = true;
-	} else if (msg.getCommand() == C_STREAM &&
-	           (msg.getType() == ST_SOUND            ||
-	            msg.getType() == ST_IMAGE            ||
-	            msg.getType() == ST_FIRMWARE_REQUEST || msg.getType() == ST_FIRMWARE_RESPONSE )) {
+	} else if (MyMessage_getCommand(msg) == C_STREAM &&
+	           (MyMessage_getType(msg) == ST_SOUND            ||
+	            MyMessage_getType(msg) == ST_IMAGE            ||
+	            MyMessage_getType(msg) == ST_FIRMWARE_REQUEST || MyMessage_getType(msg) == ST_FIRMWARE_RESPONSE )) {
 		ret = true;
 	}
 	if (ret) {
-		SIGN_DEBUG(PSTR("SGN:SKP:%s CMD=%" PRIu8 ",TYPE=%" PRIu8 "\n"), msg.isEcho() ? "ECHO" : "MSG",
-		           msg.getCommand(),
-		           msg.getType()); //Skip signing/verification of this message
+		SIGN_DEBUG(PSTR("SGN:SKP:%s CMD=%" PRIu8 ",TYPE=%" PRIu8 "\n"), MyMessage_isEcho(msg) ? "ECHO" : "MSG",
+		           MyMessage_getCommand(msg),
+		           MyMessage_getType(msg)); //Skip signing/verification of this message
 	}
 	return ret;
 }
 #endif
 
 // Helper to prepare a signing presentation message
-static void prepareSigningPresentation(MyMessage &msg, uint8_t destination)
+static void prepareSigningPresentation(MyMessage *msg, uint8_t destination)
 {
 	// Only supports version 1 for now
-	(void)build(msg, destination, NODE_SENSOR_ID, C_INTERNAL, I_SIGNING_PRESENTATION).set("");
-	msg.setLength(2);
-	msg.setPayloadType(P_CUSTOM);		// displayed as hex
-	msg.data[0] = SIGNING_PRESENTATION_VERSION_1;
-	msg.data[1] = 0;
+	(void)MyMessage_setString(build(msg, destination, NODE_SENSOR_ID, C_INTERNAL, I_SIGNING_PRESENTATION,false),"");
+	MyMessage_setLength(msg,2);
+	MyMessage_setPayloadType(msg,P_CUSTOM);		// displayed as hex
+	msg->data[0] = SIGNING_PRESENTATION_VERSION_1;
+	msg->data[1] = 0;
 }
 
 // Helper to process presentation messages
-static bool signerInternalProcessPresentation(MyMessage &msg)
+static bool signerInternalProcessPresentation(MyMessage *msg)
 {
-	const uint8_t sender = msg.getSender();
+	const uint8_t sender = MyMessage_getSender(msg);
 #if defined(MY_SIGNING_FEATURE)
-	if (msg.data[0] != SIGNING_PRESENTATION_VERSION_1) {
+	if (msg->data[0] != SIGNING_PRESENTATION_VERSION_1) {
 		SIGN_DEBUG(PSTR("!SGN:PRE:VER=%" PRIu8 "\n"),
-		           msg.data[0]); // Unsupported signing presentation version
+		           msg->data[0]); // Unsupported signing presentation version
 		return true; // Just drop this presentation message
 	}
 	// We only handle version 1 here...
-	if (msg.data[1] & SIGNING_PRESENTATION_REQUIRE_SIGNATURES) {
+	if (msg->data[1] & SIGNING_PRESENTATION_REQUIRE_SIGNATURES) {
 		// We received an indicator that the sender require us to sign all messages we send to it
 		SIGN_DEBUG(PSTR("SGN:PRE:SGN REQ,FROM=%" PRIu8 "\n"), sender); // Node require signatures
 		SET_SIGN(sender);
@@ -420,7 +420,7 @@ static bool signerInternalProcessPresentation(MyMessage &msg)
 		}
 #endif
 	}
-	if (msg.data[1] & SIGNING_PRESENTATION_REQUIRE_WHITELISTING) {
+	if (msg->data[1] & SIGNING_PRESENTATION_REQUIRE_WHITELISTING) {
 		// We received an indicator that the sender require us to salt signatures with serial
 		SIGN_DEBUG(PSTR("SGN:PRE:WHI REQ,FROM=%" PRIu8 "\n"), sender); // Node require whitelisting
 		SET_WHITELIST(sender);
@@ -451,23 +451,23 @@ static bool signerInternalProcessPresentation(MyMessage &msg)
 #if defined(MY_SIGNING_REQUEST_SIGNATURES)
 #if defined(MY_SIGNING_WEAK_SECURITY)
 	if (DO_SIGN(sender)) {
-		msg.data[1] |= SIGNING_PRESENTATION_REQUIRE_SIGNATURES;
+		msg->data[1] |= SIGNING_PRESENTATION_REQUIRE_SIGNATURES;
 	}
 #else
-	msg.data[1] |= SIGNING_PRESENTATION_REQUIRE_SIGNATURES;
+	msg->data[1] |= SIGNING_PRESENTATION_REQUIRE_SIGNATURES;
 #endif
 #endif // MY_SIGNING_REQUEST_SIGNATURES
 #if defined(MY_SIGNING_NODE_WHITELISTING)
-	msg.data[1] |= SIGNING_PRESENTATION_REQUIRE_WHITELISTING;
+	msg->data[1] |= SIGNING_PRESENTATION_REQUIRE_WHITELISTING;
 #endif // MY_SIGNING_NODE_WHITELISTING
-	if (msg.data[1] & SIGNING_PRESENTATION_REQUIRE_SIGNATURES) {
+	if (msg->data[1] & SIGNING_PRESENTATION_REQUIRE_SIGNATURES) {
 		SIGN_DEBUG(PSTR("SGN:PRE:SGN REQ,TO=%" PRIu8 "\n"),
 		           sender); // Inform node that we require signatures
 	} else {
 		SIGN_DEBUG(PSTR("SGN:PRE:SGN NREQ,TO=%" PRIu8 "\n"),
 		           sender); // Inform node that we do not require signatures
 	}
-	if (msg.data[1] & SIGNING_PRESENTATION_REQUIRE_WHITELISTING) {
+	if (msg->data[1] & SIGNING_PRESENTATION_REQUIRE_WHITELISTING) {
 		SIGN_DEBUG(PSTR("SGN:PRE:WHI REQ,TO=%" PRIu8 "\n"),
 		           sender); // Inform node that we require whitelisting
 	} else {
@@ -508,7 +508,7 @@ static bool signerInternalProcessPresentation(MyMessage &msg)
 }
 
 // Helper to process nonce request messages
-static bool signerInternalProcessNonceRequest(MyMessage &msg)
+static bool signerInternalProcessNonceRequest(MyMessage *msg)
 {
 #if defined(MY_SIGNING_FEATURE)
 #if defined(MY_NODE_LOCK_FEATURE)
@@ -520,10 +520,10 @@ static bool signerInternalProcessNonceRequest(MyMessage &msg)
 	}
 #endif // MY_NODE_LOCK_FEATURE
 	if (signerBackendGetNonce(msg)) {
-		if (!_sendRoute(build(msg, msg.getSender(), NODE_SENSOR_ID, C_INTERNAL, I_NONCE_RESPONSE))) {
-			SIGN_DEBUG(PSTR("!SGN:NCE:XMT,TO=%" PRIu8 " FAIL\n"), msg.getSender()); // Failed to transmit nonce!
+		if (!_sendRoute(build(msg, MyMessage_getSender(msg), NODE_SENSOR_ID, C_INTERNAL, I_NONCE_RESPONSE))) {
+			SIGN_DEBUG(PSTR("!SGN:NCE:XMT,TO=%" PRIu8 " FAIL\n"), MyMessage_getSender(msg)); // Failed to transmit nonce!
 		} else {
-			SIGN_DEBUG(PSTR("SGN:NCE:XMT,TO=%" PRIu8 "\n"), msg.getSender());
+			SIGN_DEBUG(PSTR("SGN:NCE:XMT,TO=%" PRIu8 "\n"), MyMessage_getSender(msg));
 		}
 	} else {
 		SIGN_DEBUG(PSTR("!SGN:NCE:GEN\n")); // Failed to generate nonce!
@@ -537,17 +537,17 @@ static bool signerInternalProcessNonceRequest(MyMessage &msg)
 }
 
 // Helper to process nonce response messages
-static bool signerInternalProcessNonceResponse(MyMessage &msg)
+static bool signerInternalProcessNonceResponse(MyMessage *msg)
 {
 #if defined(MY_SIGNING_FEATURE)
 	// Proceed with signing if nonce has been received
-	SIGN_DEBUG(PSTR("SGN:NCE:FROM=%" PRIu8 "\n"), msg.getSender());
-	if (msg.getSender() != _msgSign.getDestination()) {
-		SIGN_DEBUG(PSTR("SGN:NCE:%" PRIu8 "!=%" PRIu8 " (DROPPED)\n"), _msgSign.getDestination(),
-		           msg.getSender());
+	SIGN_DEBUG(PSTR("SGN:NCE:FROM=%" PRIu8 "\n"), MyMessage_getSender(msg));
+	if (MyMessage_getSender(msg) != MyMessage_getDestination(&_msgSign)) {
+		SIGN_DEBUG(PSTR("SGN:NCE:%" PRIu8 "!=%" PRIu8 " (DROPPED)\n"), MyMessage_getDestination(&_msgSign),
+		           MyMessage_getSender(msg));
 	} else {
 		signerBackendPutNonce(msg);
-		if (signerBackendSignMsg(_msgSign)) {
+		if (signerBackendSignMsg(&_msgSign)) {
 			// _msgSign now contains the signed message pending transmission
 			_signingNonceStatus = SIGN_OK;
 		}

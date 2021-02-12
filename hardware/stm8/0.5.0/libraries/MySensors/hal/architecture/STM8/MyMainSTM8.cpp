@@ -1,4 +1,4 @@
-/*
+﻿/*
  * The MySensors Arduino library handles the wireless radio link and protocol
  * between your home built sensors/actuators and HA controller of choice.
  * The sensors forms a self healing radio network with optional repeaters. Each
@@ -17,22 +17,19 @@
  * version 2 as published by the Free Software Foundation.
  */
 
-#ifndef MyHelperFunctions_h
-#define MyHelperFunctions_h
-
-/**
-* Single character hex conversion
-* @param c hex char
-* @return byte representation of the paramter
-*/
-static uint8_t convertH2I(const char c);
-
-/**
-* Lower nibble byte to hex conversion
-* @param i byte
-* @return hex char representation of the parameter
-*/
-static char convertI2H(const uint8_t i);
-
-
-#endif
+// Initialize library and handle sketch functions like we want to
+int main(void)
+{
+  init();		
+	_begin(); // Startup MySensors library
+	for(;;) {
+		_process();	// Process incoming data
+		if (loop) {	 // Call sketch loop
+			loop();
+		}
+		if (serialEventRun) {
+			serialEventRun();
+		}
+	}
+	return 0;
+}

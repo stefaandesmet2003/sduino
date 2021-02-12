@@ -112,19 +112,21 @@ bool transportHALReceive(MyMessage *inMsg, uint8_t *msgLength)
 #endif
 #endif
 	// Reject messages with incorrect protocol version
-	MyMessage tmp = *inMsg;
-	if (!tmp.isProtocolVersionValid()) {
+	//MyMessage tmp = *inMsg;
+	MyMessage tmp;
+	tmp = *inMsg;
+	if (!MyMessage_isProtocolVersionValid(&tmp)) {
 		setIndication(INDICATION_ERR_VERSION);
 		TRANSPORT_HAL_DEBUG(PSTR("!THA:RCV:PVER=%" PRIu8 "\n"),
-		                    tmp.getVersion());	// protocol version mismatch
+		                    MyMessage_getVersion(&tmp));	// protocol version mismatch
 		return false;
 	}
-	*msgLength = tmp.getLength();
+	*msgLength = MyMessage_getLength(&tmp);
 #if defined(MY_TRANSPORT_ENCRYPTION) && !defined(MY_RADIO_RFM69)
 	// payload length = a multiple of blocksize length for decrypted messages, i.e. cannot be used for payload length check
 #else
 	// Reject payloads with incorrect length
-	const uint8_t expectedMessageLength = tmp.getExpectedMessageSize();
+	const uint8_t expectedMessageLength = MyMessage_getExpectedMessageSize(&tmp);
 	if (payloadLength != expectedMessageLength) {
 		setIndication(INDICATION_ERR_LENGTH);
 		TRANSPORT_HAL_DEBUG(PSTR("!THA:RCV:LEN=%" PRIu8 ",EXP=%" PRIu8 "\n"), payloadLength,

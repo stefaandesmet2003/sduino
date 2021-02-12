@@ -236,7 +236,7 @@ LOCAL void RF24_powerUp(void);
 * @return
 */
 LOCAL bool RF24_sendMessage(const uint8_t recipient, const void *buf, const uint8_t len,
-                            const bool noACK = false);
+                            const bool noACK /* = false */);
 /**
 * @brief RF24_getDynamicPayloadSize
 * @return

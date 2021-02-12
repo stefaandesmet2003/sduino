@@ -140,6 +140,8 @@
  * @note When defined, if you want to use the pins as a UART, you need to handle initialization and
  * configuration yourself.
  */
+// TODO STM8 - Serial prints overal vervangen pff
+#define MY_DISABLED_SERIAL
 //#define MY_DISABLED_SERIAL
 
 /**
@@ -149,7 +151,7 @@
  *
  * @note This saves 120 bytes of flash.
  */
-//#define MY_SPLASH_SCREEN_DISABLED
+#define MY_SPLASH_SCREEN_DISABLED
 
 /**
  * @def MY_BAUD_RATE

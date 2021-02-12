@@ -152,12 +152,12 @@ int16_t transportGetReceivingSNR(void)
 
 int16_t transportGetTxPowerPercent(void)
 {
-	return static_cast<int16_t>(RF24_getTxPowerPercent());
+	return (int16_t)(RF24_getTxPowerPercent());
 }
 
 int16_t transportGetTxPowerLevel(void)
 {
-	return static_cast<int16_t>(RF24_getTxPowerLevel());
+	return (int16_t)(RF24_getTxPowerLevel());
 }
 
 bool transportSetTxPowerPercent(const uint8_t powerPercent)

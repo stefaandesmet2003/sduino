@@ -42,9 +42,9 @@ typedef uint16_t EEPtr;
 
 #define EEPROM_cell	((uint8_t*)((uint16_t)FLASH_DATA_START_PHYSICAL_ADDRESS))
 
-inline uint8_t EEPROM_read( int idx )		{ return EERef( idx ); }
-void EEPROM_write( int idx, uint8_t val );
-void EEPROM_update( int idx, uint8_t val );
+inline uint8_t EEPROM_read( uint16_t idx )		{ return EERef( idx ); }
+void EEPROM_write( uint16_t idx, uint8_t val );
+void EEPROM_update( uint16_t idx, uint8_t val );
 
 inline EEPtr EEPROM_begin()			{ return 0x00; }
 inline EEPtr EEPROM_end()			{ return E2END + 1; }
@@ -66,8 +66,8 @@ inline uint8_t eeprom_is_unlocked(void) {return (FLASH->IAPSR & FLASH_FLAG_DUL);
 // returns true if EEPROM is ready (no write in progress)
 inline uint8_t eeprom_is_ready(void) {return (FLASH->IAPSR & FLASH_IAPSR_EOP);}
 
-void eeprom_write_block(uint16_t idx, const uint8_t *ptr, size_t len);
-void eeprom_update_block(uint16_t idx, uint8_t *ptr, size_t len);
-void eeprom_read_block(const uint16_t idx, uint8_t *ptr, size_t len);
+void eeprom_write_block(uint16_t __dst, const uint8_t *__src, size_t len);
+void eeprom_update_block(uint16_t __dst, const uint8_t *__src, size_t len);
+void eeprom_read_block(const uint16_t __src, uint8_t *__dst, size_t len);
 
 #endif /* EEPROM_h */

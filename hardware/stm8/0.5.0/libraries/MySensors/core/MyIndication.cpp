@@ -44,8 +44,9 @@ void setIndication( const indication_t ind )
 }
 
 #if !defined(MY_INDICATION_HANDLER)
-void indication(indication_t)
+void indication(indication_t ind)
 {
+	(void) ind;
 	// empty function, resolves AVR-specific GCC optimization bug (<5.5) if handler not used
 	// see here: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=77326
 }

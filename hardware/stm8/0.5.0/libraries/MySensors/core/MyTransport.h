@@ -373,7 +373,7 @@ void stFailureUpdate(void);
 * @brief Switch SM state
 * @param newState New state to switch SM to
 */
-void transportSwitchSM(transportState_t &newState);
+void transportSwitchSM(transportState_t *newState);
 /**
 * @brief Update SM state
 */
@@ -423,26 +423,26 @@ uint8_t transportPingNode(const uint8_t targetId);
 * @param message
 * @return true if message sent successfully
 */
-bool transportRouteMessage(MyMessage &message);
+bool transportRouteMessage(MyMessage *message);
 /**
 * @brief Send and route message according to destination with transport state check
 * @param message
 * @return true if message sent successfully and false if sending error or transport !OK
 */
-bool transportSendRoute(MyMessage &message);
+bool transportSendRoute(MyMessage *message);
 /**
 * @brief Send message to recipient
 * @param to Recipient of message
 * @param message
 * @return true if message sent successfully
 */
-bool transportSendWrite(const uint8_t to, MyMessage &message);
+bool transportSendWrite(const uint8_t to, MyMessage *message);
 /**
 * @brief Check uplink to GW, includes flooding control
 * @param force to override flood control timer
 * @return true if uplink ok
 */
-bool transportCheckUplink(const bool force = false);
+bool transportCheckUplink(const bool force /* = false */);
 
 // PUBLIC functions
 
@@ -451,7 +451,7 @@ bool transportCheckUplink(const bool force = false);
 * @param waitingMS timeout in MS, set 0 (default) for no timeout, i.e. wait indefinitely. For a node in standalone mode (optional network connection) set >0 to allow a node entering the main loop() function.
 * @return true if transport is ready
 */
-bool transportWaitUntilReady(const uint32_t waitingMS = 0);
+bool transportWaitUntilReady(const uint32_t waitingMS /* = 0 */);
 /**
 * @brief Initialize transport and SM
 */
