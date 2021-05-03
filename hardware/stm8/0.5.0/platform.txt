@@ -42,7 +42,7 @@ compiler.tools.path={runtime.tools.avr-gcc.path}/bin
 
 compiler.c.cmd=sdcc
 compiler.c.wrapper=sdcc.sh
-compiler.c.flags=-MMD -c -Ddouble=float -DUSE_STDINT -D__PROG_TYPES_COMPAT__ {compiler.warning_flags}
+compiler.c.flags=-MMD -c -Ddouble=float -DUSE_STDINT -D__PROG_TYPES_COMPAT__ {compiler.warning_flags} --opt-code-size
 compiler.c.elf.flags=--code-size {upload.maximum_size} --iram-size {upload.maximum_data_size}
 
 compiler.c.elf.cmd=sdcc
