@@ -14,6 +14,19 @@ slave_receiver and slave_sender examples have been updated with the sduino C-sty
 
 added an example, showing STM8 as a I2C serial eeprom. The example demonstrates the use of both onReceive() and onRequest() callbacks
 
+## NeoPixel
+a rudimentary port of the Adafruit_NeoPixel library  
+supports 800kHz strips @ 16MHz clock frequency (62.5ns cycle time). 
+Other configurations will result in wrong output timing and won't work correctly.
+
+The output signal timing is not completely according to WS2812B specification:  
+- 0 & 1 timings are ok, 
+- but bit0 time is app. 2100ns (34cycles) , ie. longer than 1850ns, due to additional setup (instruction cycles) after each byte
+
+Code works for my led strip, so didn't bother to unfold the asm code per bit (as eg. in https://github.com/thielj/FastLED-STM8/tree/master/platforms/stm8) to achieve better bit timing.
+
+Note : Adafruit library has lots of functions, but SDCC doesn't optimize the unused ones. 
+
 ## MySensors Light - work in progress
 A lightweight version of the popular MySensors library ported to STM8.
 
