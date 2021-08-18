@@ -27,6 +27,17 @@ Code works for my led strip, so didn't bother to unfold the asm code per bit (as
 
 Note : Adafruit library has lots of functions, but SDCC doesn't optimize the unused ones. 
 
+### Note on malloc/free
+- the library port allocates a fixed array in SRAM for pixel bytes. 
+- this is a temporary workaround because SDCC seems to allocate a fixed 1kB heap whenever malloc/free is used in the code  
+- but that is the complete SRAM in devices like STM8S103
+- for now malloc/free has been removed from the code, until I find the pleasure to investigate further
+
+## Keypad
+
+a simple port to standard C of the classic AVR library  
+seems to consume a bit much SRAM, but left it as such
+
 ## MySensors Light - work in progress
 A lightweight version of the popular MySensors library ported to STM8.
 
