@@ -69,6 +69,9 @@ volatile uint8_t
   hi,             // PORT w/output bit set high
   lo;             // PORT w/output bit set low
 
+// SDS TEMP (see note in NeoPixel.h)
+uint8_t thePixels[MAX_PIXEL_BYTES];
+
 /*!
   @brief   NeoPixel constructor when length, pin and pixel type are known
            at compile-time.
@@ -84,7 +87,8 @@ volatile uint8_t
 void NeoPixel_init(uint16_t n, uint16_t p, neoPixelType t) {
   begun = false;
   brightness = 0;
-  pixels = NULL;
+  //SDS pixels = NULL;
+  pixels = thePixels;
   endTime = 0;
   numLEDs = 0;
   numBytes = 0;
@@ -97,7 +101,7 @@ void NeoPixel_init(uint16_t n, uint16_t p, neoPixelType t) {
   @brief   Deallocate Adafruit_NeoPixel object, set data pin back to INPUT.
 */
 void NeoPixel_exit() {
-  free(pixels);
+  //SDS free(pixels);
   if(pin >= 0) pinMode(pin, INPUT);
 }
 
@@ -161,11 +165,13 @@ uint8_t *NeoPixel_getPixels(void) {
            type).
 */
 void NeoPixel_updateLength(uint16_t n) {
-  free(pixels); // Free existing data (if any)
+  //SDS free(pixels); // Free existing data (if any)
 
   // Allocate new data -- note: ALL PIXELS ARE CLEARED
   numBytes = n * ((wOffset == rOffset) ? 3 : 4);
-  if((pixels = (uint8_t *)malloc(numBytes))) {
+  //SDS if((pixels = (uint8_t *)malloc(numBytes))) {
+  //SDS the fixed pixel array is a temporary solution, so I don't care about range checks! (memset)
+  if(pixels) {
     memset(pixels, 0, numBytes);
     numLEDs = n;
   } else {

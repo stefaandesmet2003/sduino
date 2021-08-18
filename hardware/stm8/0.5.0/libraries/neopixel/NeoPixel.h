@@ -33,11 +33,20 @@
  * 
  * SDS 2021 : modified for STM8 + SDCC (sduino)
  * support 800kHz / 16MHz only for now
- *
+  * TODO : fix heap usage problem
+ * -> original code uses malloc/free to allocate memory for pixel bytes
+ * -> SDCC seems to allocate fixed 1kB for heap, but that's the complete SRAM for STM8S103 and likes
+ * -> solution for now is to define  a static pixels[] array with MAX_PIXEL_BYTES bytes
+ * -> no range checks performed, so make sure to adapt MAX_PIXEL_BYTES to your needs
+*
  */
 
 #ifndef ADAFRUIT_NEOPIXEL_H
 #define ADAFRUIT_NEOPIXEL_H
+
+// SDS TEMP to avoid using free/malloc (see note above about SDCC & heap)
+// library won't address more than this number of pixels, whatever length is set in init() or updateLength()
+#define MAX_PIXEL_BYTES  100
 
 #ifdef ARDUINO
   #if (ARDUINO >= 100)
