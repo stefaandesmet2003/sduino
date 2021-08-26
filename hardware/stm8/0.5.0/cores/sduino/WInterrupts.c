@@ -284,7 +284,9 @@ void attachInterruptTwi(void (*userFunc)(void) ) {
 }
 */
 
-// define as __naked to avoid the nonsense "clr a/dix x,a" prolog
+// define as __naked to avoid the nonsense "clr a/div x,a" prolog
+// SDS : div x,a has no effect on registers (div by zero), introduces only latency
+// what's the purpose of this prologue??
 #define IMPLEMENT_ISR(vect, interrupt) \
  void vect(void) __interrupt((interrupt)>>8) __naked { \
     intFunc[(interrupt)&0xff](); \
